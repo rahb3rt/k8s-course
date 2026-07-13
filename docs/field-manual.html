@@ -316,10 +316,10 @@
   <header class="mast">
     <p class="eyebrow">SRE Track · Field Manual</p>
     <h1>Kubernetes from the Ground Up</h1>
-    <p class="lede">A four-day internals curriculum built on a real <b>kubeadm</b> cluster — where every component gets dissected, deliberately broken, and debugged cold. No black boxes.</p>
+    <p class="lede">A six-day internals curriculum built on a real <b>kubeadm</b> cluster — where every component gets dissected, deliberately broken, and debugged cold. No black boxes.</p>
     <div class="mast-meta">
       <span>Host <b>Apple Silicon · Lima/vz</b></span>
-      <span>Kubernetes <b>v1.31</b></span>
+      <span>Kubernetes <b>v1.31 → v1.32</b></span>
       <span>Runtime <b>containerd</b></span>
       <span>CNI <b>Flannel</b></span>
     </div>
@@ -344,6 +344,16 @@
     <div class="pnode done">
       <div class="pn-day">Day 04</div>
       <div class="pn-title">Production Operations</div>
+      <div class="pn-state"><span class="dot"></span>Complete</div>
+    </div>
+    <div class="pnode done">
+      <div class="pn-day">Day 05</div>
+      <div class="pn-title">Observability</div>
+      <div class="pn-state"><span class="dot"></span>Complete</div>
+    </div>
+    <div class="pnode done">
+      <div class="pn-day">Day 06</div>
+      <div class="pn-title">Cluster Upgrades</div>
       <div class="pn-state"><span class="dot"></span>Complete</div>
     </div>
   </div>
@@ -619,6 +629,84 @@ kubectl describe pvc X | tail</pre>
     </div>
   </section>
 
+  <!-- ============ DAY 5 ============ -->
+  <section class="day" id="day5">
+    <div class="day-head">
+      <span class="day-idx">D5</span>
+      <h2>Observability: Prometheus &amp; Grafana</h2>
+      <span class="chip ok">Complete</span>
+    </div>
+    <p>Deployed the kube-prometheus-stack with Helm and learned the pull-based metrics pipeline — from scrape to dashboard to firing alert.</p>
+    <div class="lab">
+      <span class="tag">5.1</span>
+      <div class="lab-t">Install with Helm</div>
+      <div class="lab-d">One chart → Prometheus + Grafana + Alertmanager + operator + node-exporter (DaemonSet, one per node) + kube-state-metrics.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">5.2</span>
+      <div class="lab-t">Grafana &amp; PromQL</div>
+      <div class="lab-d">Port-forward in; query <code class="inl">kube_pod_container_status_restarts_total</code> — the apiserver's restart scars from Days 1 &amp; 4, as time series.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">5.3</span>
+      <div class="lab-t">Observe a live OOM</div>
+      <div class="lab-d">A crash-looping pod's restart counter climbing in real time, plus its <code class="inl">OOMKilled</code> reason metric.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">5.4</span>
+      <div class="lab-t">CRDs &amp; a firing alert</div>
+      <div class="lab-d">A <code class="inl">PrometheusRule</code> reconciled by the operator into a <code class="inl">firing</code> alert — the controller pattern, live.</div>
+    </div>
+    <div class="takes">
+      <div class="take crit"><b>Observability is not retroactive</b><p>Prometheus only knows what it scraped since it started. Deploy monitoring <i>before</i> the incident — a metric you weren't collecting is a question you can never answer.</p></div>
+      <div class="take"><b>Operators reconcile CRDs</b><p>ServiceMonitor/PrometheusRule are intent; the operator makes them real — a live preview of Phase 2's controller pattern.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ DAY 6 ============ -->
+  <section class="day" id="day6">
+    <div class="day-head">
+      <span class="day-idx">D6</span>
+      <h2>Cluster Upgrades</h2>
+      <span class="chip ok">Complete</span>
+    </div>
+    <p>Upgraded the live cluster <b>v1.31.14 → v1.32.13</b> — control plane first, then the node — the real rolling-upgrade procedure.</p>
+    <h3 class="sub">The sequence</h3>
+    <pre>sudo kubeadm upgrade apply v1.32.13 -y   <span class="c"># cp: swaps static pods + renews certs</span>
+sudo apt install kubelet=1.32.* ; sudo systemctl restart kubelet
+<span class="c"># each worker: kubeadm upgrade node -> drain -> upgrade kubelet -> uncordon</span></pre>
+    <div class="takes">
+      <div class="take"><b>Mixed-version is valid</b><p>Mid-upgrade the cp ran 1.32 while the worker ran 1.31 — the skew rule (kubelet ≤3 minors behind, never ahead) is what makes rolling upgrades possible.</p></div>
+      <div class="take"><b>Upgrade order is invariant</b><p>kubeadm tool → components → kubelet; control plane before nodes; one minor at a time. <code class="inl">kubeadm upgrade</code> renews certs for free.</p></div>
+      <div class="take crit"><b>Capacity buys safety</b><p>Draining the only worker = a blip; ≥2 workers + PDBs + spread = zero-downtime upgrades. Same lesson as the Day-4.3 drain.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ FIELD NOTES ============ -->
+  <section class="day" id="notes">
+    <div class="day-head">
+      <span class="day-idx">?</span>
+      <h2>Field Notes — questions along the way</h2>
+      <span class="chip todo">Q&amp;A</span>
+    </div>
+    <p>Answers to questions that came up outside the daily labs. Grows as we go.</p>
+
+    <h3 class="sub">Q · Upgrading a big fleet — a ton of services, many nodes. Best way?</h3>
+    <p>The manual kubeadm flow is right for <i>understanding</i>; at scale it changes in three ways:</p>
+    <div class="takes">
+      <div class="take"><b>1 · Protect every service with a PDB</b><p>A PodDisruptionBudget per service (<code class="inl">maxUnavailable: 1</code> / <code class="inl">minAvailable: 50%</code>) + ≥2–3 replicas spread across nodes/zones (<code class="inl">topologySpreadConstraints</code>) + spare capacity. The drain honors PDBs, so you can drain node after node and never take a service below its floor.</p></div>
+      <div class="take"><b>2 · Replace nodes, don't upgrade in place</b><p>Surge / blue-green: bring up new nodes on the new version, drain the old onto them in batches, delete the old. Easier rollback. Run it with <b>managed node pools</b> (EKS/GKE/AKS — preferred), <b>Cluster API</b> (self-managed, declarative), or kubespray/Ansible — not by hand on 100 nodes.</p></div>
+      <div class="take crit"><b>3 · Scan for removed APIs first</b><p>The #1 thing that breaks many services on a minor upgrade is a <b>removed API version</b>. Before upgrading, scan every manifest/object with <code class="inl">pluto</code> or <code class="inl">kubent</code> and fix them. Invisible in a small cluster, catastrophic in a big one.</p></div>
+      <div class="take"><b>Fleet level</b><p>Many clusters &gt; one giant cluster. Upgrade in waves (canary → staging → prod) driven by GitOps (Argo/Flux); blue-green whole clusters for big jumps. Depth in Architect Track A3 (scaling) + A5 (fleet).</p></div>
+    </div>
+
+    <h3 class="sub">Q · I'm on a Mac — does that change anything?</h3>
+    <p>Kubernetes <i>is</i> Linux — namespaces &amp; cgroups are kernel features that don't exist on macOS. The Mac only <b>hosts</b> the Linux VMs (via Lima/vz). macOS runs <code class="inl">brew</code>, <code class="inl">limactl</code>, <code class="inl">kubectl</code>; everything <i>inside</i> the cluster (<code class="inl">kubeadm</code>, <code class="inl">crictl</code>, <code class="inl">etcdctl</code>, <code class="inl">iptables</code>) runs in the VMs. Any tool that "runs Kubernetes on a Mac" is quietly a Linux VM underneath.</p>
+
+    <h3 class="sub">Q · How do I become an architect, not just an operator?</h3>
+    <p>An operator <i>observes</i> controllers; an architect <b>writes</b> them. The bridge is the through-line of every day here — <i>"the API stores intent; something must enforce it."</i> That something is a controller. Phase 2 (the Architect Track) builds them in Go + kubebuilder and layers on platform, scaling, delivery, and security design.</p>
+  </section>
+
   <!-- ============ TOOLKIT ============ -->
   <section class="day" id="toolkit">
     <div class="day-head">
@@ -681,7 +769,7 @@ kubectl describe pvc X | tail</pre>
 
   <footer>
     <span>Kubernetes SRE Field Manual</span>
-    <span>Phase 1 complete · Days 1–4 · Architect Track next</span>
+    <span>Days 1–6 complete · Field Notes · Architect Track next</span>
   </footer>
 
 </div>
