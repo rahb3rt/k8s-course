@@ -1,0 +1,14 @@
+// Replace the placeholder ReplicaPinSpec (the `Foo` field) in api/v1/replicapin_types.go
+// with this. The +kubebuilder markers become OpenAPI validation in the generated CRD.
+
+// ReplicaPinSpec defines the desired state of ReplicaPin
+type ReplicaPinSpec struct {
+	// DeploymentName is the Deployment to pin, in this namespace.
+	// +required
+	DeploymentName string `json:"deploymentName"`
+
+	// Replicas is the exact replica count to hold the Deployment at.
+	// +kubebuilder:validation:Minimum=0
+	// +required
+	Replicas int32 `json:"replicas"`
+}

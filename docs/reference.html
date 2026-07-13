@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference — Kubernetes objects, workloads &amp; architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <a class="item active" href="reference.html"><span class="n">▣</span> Reference</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
+      <a class="item" href="day5.html"><span class="n">D5</span> Observability <span class="st done"></span></a>
+      <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st done"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st next"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <p class="eyebrow">Reference</p>
+      <h1>Objects, workloads &amp; architecture</h1>
+      <p class="lede">Quick definitions and "when to use which" for the pieces you meet across the course. Each links to the day that dissects it.</p>
+
+      <h2>Cluster architecture</h2>
+      <p>Everything is a client of the <b>API server</b>, which is the only thing that talks to <b>etcd</b>. The control plane makes decisions; the nodes run the work. (Deep dive: <a href="day1.html">Day 1</a>.)</p>
+      <div class="arch">
+        <div class="plane">
+          <div class="plane-h">Control plane (cp)</div>
+          <div class="comps">
+            <div class="comp"><b>kube-apiserver</b><span>The front door. Validates + serves every object; the only component that reads/writes etcd.</span></div>
+            <div class="comp"><b>etcd</b><span>The database. Consistent key-value store holding all cluster state (as protobuf).</span></div>
+            <div class="comp"><b>kube-scheduler</b><span>Assigns each new Pod to a node (resources, affinity, taints, spread).</span></div>
+            <div class="comp"><b>kube-controller-manager</b><span>Runs the built-in reconcile loops (Deployment, ReplicaSet, Node, Job…).</span></div>
+          </div>
+        </div>
+        <div class="plane node">
+          <div class="plane-h">Worker node</div>
+          <div class="comps">
+            <div class="comp"><b>kubelet</b><span>The node agent. Runs the Pods the API server assigns; reports status. Not a Pod itself.</span></div>
+            <div class="comp"><b>kube-proxy</b><span>Programs iptables/IPVS so Service virtual IPs route to Pod IPs.</span></div>
+            <div class="comp"><b>containerd (CRI)</b><span>The container runtime — pulls images, runs containers via runc.</span></div>
+            <div class="comp"><b>Pods</b><span>Your workloads. Wired to the network by the CNI plugin (Flannel here).</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h2>Workloads — when to use which</h2>
+      <p>These are the objects that <em>manage Pods</em>. You almost never create a bare Pod. (Lifecycle: <a href="day3.html">Day 3</a>.)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Object</th><th>What it manages</th><th>Reach for it when…</th></tr></thead>
+        <tbody>
+          <tr><td><b>Deployment</b></td><td>Stateless, interchangeable replicas (via a ReplicaSet)</td><td>Web apps, APIs — anything where pods are cattle. Rolling updates &amp; rollbacks.</td></tr>
+          <tr><td><b>ReplicaSet</b></td><td>A fixed number of identical Pods</td><td>Rarely directly — a Deployment owns these and manages them for you.</td></tr>
+          <tr><td><b>StatefulSet</b></td><td>Pods with <b>stable identity</b>: ordinal name, own PVC, ordered startup</td><td>Databases &amp; clustered apps (Kafka, etcd, Postgres) needing stable name/DNS/storage.</td></tr>
+          <tr><td><b>DaemonSet</b></td><td><b>One Pod per node</b></td><td>Node agents: log shippers, node-exporter, the CNI, CSI, security agents.</td></tr>
+          <tr><td><b>Job</b></td><td>Run-to-completion Pods</td><td>Batch work: migrations, one-off processing. Retries until success.</td></tr>
+          <tr><td><b>CronJob</b></td><td>Jobs on a schedule</td><td>Scheduled batch: backups, reports, cleanups.</td></tr>
+          <tr><td><b>Pod</b></td><td>One or more co-located containers (the atom)</td><td>Almost never alone — debugging/one-shots only. Let a controller own it.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="grid2">
+        <div class="card"><b>Deployment vs StatefulSet</b><p>Cattle vs. named livestock. If any pod is interchangeable and holds no unique data → Deployment. If pod <code class="inl">db-0</code> must always be <code class="inl">db-0</code> with <em>its</em> disk → StatefulSet.</p></div>
+        <div class="card"><b>DaemonSet vs Deployment</b><p>"On every node" (DaemonSet) vs "N replicas wherever they fit" (Deployment). Node-level infra is a DaemonSet; apps are Deployments.</p></div>
+      </div>
+
+      <h2>Networking objects</h2>
+      <p>How traffic finds Pods. (Deep dive: <a href="day2.html">Day 2</a>.)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Object</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td><b>Service · ClusterIP</b></td><td>A stable internal virtual IP that load-balances to a set of Pods. The default. (iptables/conntrack under the hood.)</td></tr>
+          <tr><td><b>Service · NodePort</b></td><td>Exposes the Service on a fixed port on <em>every</em> node. Basic external access.</td></tr>
+          <tr><td><b>Service · LoadBalancer</b></td><td>Provisions a cloud load balancer that points at the Service. Standard external access in the cloud.</td></tr>
+          <tr><td><b>Headless Service</b></td><td><code class="inl">clusterIP: None</code> — no VIP; instead one DNS record per Pod. Powers StatefulSet identity.</td></tr>
+          <tr><td><b>Ingress</b></td><td>L7 HTTP(S) routing (by host/path) to Services, via an ingress controller (nginx, Traefik…).</td></tr>
+          <tr><td><b>Gateway API</b></td><td>The modern, more expressive successor to Ingress (roles-based, multi-protocol).</td></tr>
+          <tr><td><b>NetworkPolicy</b></td><td>Pod-level firewall (allow/deny by label/namespace). <b>Only enforced if the CNI implements it</b> — Flannel doesn't.</td></tr>
+          <tr><td><b>EndpointSlice</b></td><td>The live list of Pod IPs behind a Service — what kube-proxy programs and what a drain updates.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Config &amp; storage</h2>
+      <p>(Deep dive: <a href="day3.html">Day 3</a>.)</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Object</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td><b>ConfigMap</b></td><td>Non-secret config (key/values, files) injected as env vars or mounted files.</td></tr>
+          <tr><td><b>Secret</b></td><td>Sensitive data. <b>base64-encoded, not encrypted</b> by default — enable encryption-at-rest / use External Secrets in prod.</td></tr>
+          <tr><td><b>PersistentVolume (PV)</b></td><td>A real piece of storage in the cluster (disk, NFS share, cloud volume).</td></tr>
+          <tr><td><b>PersistentVolumeClaim (PVC)</b></td><td>A <em>request</em> for storage ("1Gi, RWO"). Binds to a PV. Pods mount the claim, not the PV.</td></tr>
+          <tr><td><b>StorageClass</b></td><td>A template + provisioner for creating PVs on demand (dynamic provisioning).</td></tr>
+          <tr><td><b>emptyDir</b></td><td>Ephemeral, Pod-scoped scratch space — gone when the Pod dies. (Not persistent!)</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>The request &amp; packet flow</h2>
+      <div class="flow"><b>Creating a Pod:</b>  kubectl → <b>API server</b> (authn/authz/admission) → <b>etcd</b><br>
+      → <b>scheduler</b> picks a node → <b>kubelet</b> on that node → <b>containerd</b> (CRI) → <b>CNI</b> wires the network → Pod Running</div>
+      <div class="flow"><b>A request to a Service:</b>  client → <b>ClusterIP</b> (a virtual IP that exists only as an iptables rule)<br>
+      → kube-proxy's <b>DNAT</b> rewrites it to a real <b>Pod IP</b> → conntrack pins the choice → Pod<br>
+      cross-node? the packet is <b>VXLAN-encapsulated</b> node→node and decapsulated on arrival.</div>
+
+      <h2>Glossary</h2>
+      <div class="defs">
+        <div class="def"><div class="t">Pod</div><div class="d">The smallest deployable unit — one or more containers sharing a network namespace + storage.</div></div>
+        <div class="def"><div class="t">Namespace</div><div class="d">A virtual cluster for scoping and isolating objects (e.g. <code class="inl">kube-system</code>, <code class="inl">default</code>).</div></div>
+        <div class="def"><div class="t">Node</div><div class="d">A machine (VM/physical) that runs Pods, managed by its kubelet.</div></div>
+        <div class="def"><div class="t">Label / Selector</div><div class="d">Key/value tags on objects; selectors match them. How Services find Pods and Deployments own ReplicaSets.</div></div>
+        <div class="def"><div class="t">Taint / Toleration</div><div class="d">A node <b>repels</b> Pods (taint) unless the Pod <b>tolerates</b> it. Keeps workloads off control-plane nodes.</div></div>
+        <div class="def"><div class="t">Affinity / Anti-affinity</div><div class="d">Attract or repel Pods relative to nodes or other Pods (spread replicas, co-locate).</div></div>
+        <div class="def"><div class="t">Requests / Limits</div><div class="d">Requests = guaranteed resources (used for scheduling); limits = hard caps (enforced by cgroups). Drive QoS.</div></div>
+        <div class="def"><div class="t">QoS class</div><div class="d">Guaranteed / Burstable / BestEffort — derived from requests==limits; sets OOM-kill priority.</div></div>
+        <div class="def"><div class="t">HPA / VPA</div><div class="d">Horizontal Pod Autoscaler scales <em>replica count</em> on metrics; Vertical scales <em>a pod's requests/limits</em>.</div></div>
+        <div class="def"><div class="t">PodDisruptionBudget</div><div class="d">"Never take me below N available" during voluntary disruptions (drains, rollouts). Honored by <code class="inl">drain</code>.</div></div>
+        <div class="def"><div class="t">RBAC</div><div class="d">Role/ClusterRole (permissions) + RoleBinding/ClusterRoleBinding (who gets them). Subjects: users, groups, ServiceAccounts.</div></div>
+        <div class="def"><div class="t">ServiceAccount</div><div class="d">An identity for Pods to call the API. Tokens are signed by <code class="inl">sa.key</code> (Day 1).</div></div>
+        <div class="def"><div class="t">ResourceQuota / LimitRange</div><div class="d">Per-namespace caps on total resources (Quota) and per-object defaults/bounds (LimitRange).</div></div>
+        <div class="def"><div class="t">CRD</div><div class="d">CustomResourceDefinition — adds your own API type (e.g. <code class="inl">ReplicaPin</code>, A1). Served like any built-in.</div></div>
+        <div class="def"><div class="t">Operator / Controller</div><div class="d">A reconcile loop that drives observed state → desired state for some (often custom) resource. (A1.)</div></div>
+        <div class="def"><div class="t">kubeconfig / context</div><div class="d">The file (<code class="inl">~/.kube/config</code>) telling kubectl <em>which</em> cluster + user + namespace to talk to.</div></div>
+        <div class="def"><div class="t">Static / mirror pod</div><div class="d">A Pod the kubelet runs from a file on disk (the control plane); the API copy is read-only. (Day 1.)</div></div>
+      </div>
+
+      <div class="prevnext">
+        <a href="setup.html"><span class="lbl">← Prev</span> Setup</a>
+        <a href="day1.html"><span class="lbl">Start →</span> Day 1 · Substrate &amp; Control Plane</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
