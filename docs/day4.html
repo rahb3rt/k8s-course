@@ -52,10 +52,13 @@ sudo mv /etc/kubernetes/manifests{,.off} &amp;&amp; sleep 20 &amp;&amp; sudo mv 
 sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config   <span class="c"># refresh your kubeconfig too</span></pre>
       <div class="card"><b>Architect's insight</b><p><code class="inl">kubeadm upgrade</code> renews these certs as a side effect — so “upgrade at least yearly” <em>is</em> your rotation mechanism. Un-upgraded clusters are cert time-bombs. Full runbook: <code class="inl">labs/4.2-cert-rotation.md</code>.</p></div>
 
-      <h2>4.3 · Upgrades, drain, cordon &amp; PDBs</h2>
-      <p>Move workloads off a node safely and roll a version bump — and see how a PodDisruptionBudget can <em>block</em> a drain.</p>
-      <pre>kubectl cordon &lt;node&gt; ; kubectl drain &lt;node&gt; --ignore-daemonsets
-kubeadm upgrade plan ; kubeadm upgrade apply v1.31.x</pre>
+      <div class="pagehead"><h2 style="margin:0;border:none">4.3 · Upgrades, drain, cordon &amp; PDBs</h2><span class="chip ok">Done</span></div>
+      <p>Cordon (unschedulable) → drain (evict) → PDB (availability contract the drain must honor). Watched a <code class="inl">minAvailable: 2</code> PDB <strong>block</strong> a drain: 2 replicas, 1 worker, nowhere to reschedule → the drain correctly refuses.</p>
+      <pre>kubectl cordon lima-worker
+kubectl drain lima-worker --ignore-daemonsets --delete-emptydir-data
+<span class="c"># -> "Cannot evict pod as it would violate the pod's disruption budget"</span>
+kubeadm upgrade plan ; kubeadm upgrade apply v1.31.x   <span class="c"># control plane first, one minor at a time</span></pre>
+      <div class="card"><b>Design rule</b><p>PDB + spare capacity + spread across nodes = safe rolling upgrades. PDB without capacity = a node that won’t drain. kubelet may lag the apiserver ≤3 minors, never lead. Runbook: <code class="inl">labs/4.3-drain-pdb-upgrades.md</code>.</p></div>
 
       <h2>4.4 · Capstone — multi-fault incident</h2>
       <p>Several failures at once, you drive the diagnosis (scaffolded), using the method and the whole toolkit from Days 1–3.</p>
