@@ -67,18 +67,48 @@ systemctl is-active kubelet     <span class="c"># active — the one thing that 
       <p>Most security-critical: <code class="inl">sa.key</code>. Most availability-critical: <code class="inl">etcd/</code> + <code class="inl">/var/lib/etcd</code>.</p>
 
       <h2>4 · etcd is truth; the apiserver is its only interpreter</h2>
-      <pre>ectl() { kubectl -n kube-system exec -i etcd-cp -- etcdctl \
+      <pre><span class="c"># etcdctl lives in the distroless etcd pod (no shell) — exec the binary directly.</span>
+<span class="c"># Pod name = etcd-&lt;nodename&gt;, i.e. etcd-lima-cp. Wrap the cert flags in a helper:</span>
+ectl() { kubectl -n kube-system exec -i etcd-lima-cp -- etcdctl \
   --endpoints=https://127.0.0.1:2379 \
   --cacert=/etc/kubernetes/pki/etcd/ca.crt \
   --cert=/etc/kubernetes/pki/etcd/server.crt \
   --key=/etc/kubernetes/pki/etcd/server.key "$@"; }
 
-ectl get /registry --prefix --keys-only | wc -l   <span class="c"># ~286 objects in an "empty" cluster</span>
-ectl get /registry/pods/kube-system/etcd-cp       <span class="c"># binary PROTOBUF, not JSON</span></pre>
+ectl member list -w table                          <span class="c"># the etcd cluster (one member)</span>
+ectl get /registry --prefix --keys-only | wc -l    <span class="c"># ~286 objects in an "empty" cluster</span>
+ectl get /registry/pods/kube-system/etcd-lima-cp   <span class="c"># binary PROTOBUF, not JSON</span></pre>
       <p>Objects are stored as protobuf; only the apiserver encodes/decodes it. That’s the technical reason “everything goes through the apiserver” is architecture, not etiquette. (The etcd image is <strong>distroless</strong> — no shell — so exec the <code class="inl">etcdctl</code> binary directly.)</p>
 
-      <h2>Breakage — kill etcd, debug with kubectl dead</h2>
-      <p>Move <code class="inl">etcd.yaml</code> out of the manifests dir → the kubelet stops etcd → the apiserver’s <code class="inl">/readyz</code> returns 500 and crash-loops → <code class="inl">kubectl</code> hangs. But the workloads on the worker <strong>keep serving the entire time.</strong> Recover by restoring the one file; <code class="inl">/var/lib/etcd</code> was never touched, so zero data is lost. Full walkthrough: <code class="inl">day1-substrate-control-plane/labs/1.4-etcd-breakage.md</code>.</p>
+      <h2>Breakage lab — kill etcd, debug with kubectl dead</h2>
+      <p>Stop etcd by moving its manifest out of the watched dir. The apiserver’s <code class="inl">/readyz</code> hits 500 and crash-loops; <code class="inl">kubectl</code> hangs; the worker’s workloads keep serving. Fully reversible — you stop etcd’s <em>process</em>, never its data.</p>
+      <h4 class="sub">Phase 0 · steady state (set up before you break anything)</h4>
+      <pre><span class="c"># crictl needs its socket configured BEFORE the outage — you can't do it mid-crisis</span>
+sudo tee /etc/crictl.yaml &gt;/dev/null &lt;&lt;'EOF'
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+EOF
+kubectl create deployment web --image=nginx --replicas=2   <span class="c"># a workload to test survival</span>
+kubectl get nodes &amp;&amp; kubectl get pods -o wide            <span class="c"># capture the baseline</span>
+<span class="c"># in a 2nd cp terminal, watch the kubelet:</span>  sudo journalctl -u kubelet -f</pre>
+      <h4 class="sub">Phase 1 · inject</h4>
+      <pre>sudo mv /etc/kubernetes/manifests/etcd.yaml /root/etcd.yaml   <span class="c"># kubelet stops the etcd static pod</span></pre>
+      <h4 class="sub">Phase 2 · observe the blast radius</h4>
+      <pre>sudo crictl ps | grep etcd          <span class="c"># gone</span>
+kubectl get nodes                   <span class="c"># HANGS then times out (apiserver up, etcd unreachable)</span>
+<span class="c"># workloads alive? check the WORKER (crictl is node-local; web runs there, cp is tainted):</span>
+limactl shell worker -- sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps | grep nginx</pre>
+      <h4 class="sub">Phase 3 · diagnose (kubectl is dead — drop a layer)</h4>
+      <pre>sudo crictl ps -a | grep -E 'kube-apiserver|etcd'
+sudo crictl logs $(sudo crictl ps -aq --name kube-apiserver | head -1) 2&gt;&amp;1 | tail -20   <span class="c"># etcd connection refused</span>
+ls -l /etc/kubernetes/manifests/    <span class="c"># SMOKING GUN: etcd.yaml is missing</span></pre>
+      <h4 class="sub">Phase 4 · recover (self-heals)</h4>
+      <pre>sudo mv /root/etcd.yaml /etc/kubernetes/manifests/   <span class="c"># kubelet restarts etcd from the file</span>
+<span class="c"># wait 20-90s — apiserver crash-loops against fresh etcd, then recovers</span>
+kubectl get nodes ; kubectl get deployment web       <span class="c"># still 2/2 — ZERO data lost</span>
+<span class="c"># if apiserver stays 'refused' &gt;2 min, kick it: bounce its manifest out and back</span></pre>
+      <div class="card"><b>Lessons</b><p>Control plane down ≠ workloads down. When kubectl is dead: <code class="inl">crictl</code> (node-local!), <code class="inl">journalctl -u kubelet</code>, the manifests dir. <code class="inl">refused</code> = nothing listening; <code class="inl">timeout</code> = stuck on a dependency. Data outlives process — <code class="inl">/var/lib/etcd</code> survived, so recovery was lossless.</p></div>
 
       <h2>Takeaways</h2>
       <div class="grid2">

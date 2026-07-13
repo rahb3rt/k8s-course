@@ -59,7 +59,11 @@ kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80   <span class=
       <p>Pre-built <code class="inl">Kubernetes / …</code> and <code class="inl">Node Exporter / Nodes</code> dashboards, already populated. Log in as <code class="inl">admin</code>.</p>
 
       <h2>5.3 · Query with PromQL</h2>
-      <pre>sort_desc(kube_pod_container_status_restarts_total)     <span class="c"># apiserver's restart scars from Days 1 &amp; 4</span>
+      <pre><span class="c"># generate a live event to observe (crash-loops so the restart counter climbs):</span>
+kubectl apply -f manifests/oom-live.yaml
+<span class="c"># then in Grafana → Explore (datasource: Prometheus), run PromQL:</span>
+sort_desc(kube_pod_container_status_restarts_total)      <span class="c"># apiserver's restart scars from Days 1 &amp; 4</span>
+kube_pod_container_status_restarts_total{pod="oom-live"} <span class="c"># climbs on each refresh</span>
 kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}</pre>
       <div class="card crit"><b>Observability is not retroactive</b><p>Prometheus only knows what it scraped since it started. Day-3 events that predate it are gone. Deploy monitoring <em>before</em> the incident — a metric you weren't collecting is a question you can never answer.</p></div>
 
