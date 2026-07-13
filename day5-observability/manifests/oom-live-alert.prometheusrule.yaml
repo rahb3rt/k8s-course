@@ -1,0 +1,22 @@
+# A PrometheusRule CRD — intent that the Prometheus Operator reconciles into Prometheus's
+# alerting config. Fires when the oom-live pod is crash-looping. The `release: monitoring`
+# label is REQUIRED — the stack's Prometheus only selects rules carrying it.
+#   kubectl apply -f oom-live-alert.prometheusrule.yaml
+#   # in Grafana Explore, watch it fire:  ALERTS{alertname="OomLiveCrashLooping"}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: oom-live-alert
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: oom-live.rules
+      rules:
+        - alert: OomLiveCrashLooping
+          expr: rate(kube_pod_container_status_restarts_total{pod="oom-live"}[5m]) > 0
+          for: 1m
+          labels: {severity: warning}
+          annotations:
+            summary: "oom-live pod is crash-looping (OOMKilled)"
