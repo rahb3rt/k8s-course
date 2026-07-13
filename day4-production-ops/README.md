@@ -5,13 +5,15 @@ and manifests will be filled in here as we do them.
 
 ## Planned
 
-### 4.1 — etcd backup & restore (the dark twin of Lab 1.4)
-On Day 1 you stopped etcd's *process* and lost nothing. Here you **destroy its data** and
-resurrect the entire cluster from a snapshot.
-- `etcdctl snapshot save` → a point-in-time backup
-- simulate disaster: wipe `/var/lib/etcd`
-- `etcdctl snapshot restore` → new data dir → repoint etcd → cluster returns
-- Lesson: this is why single-node etcd is a SPOF and prod runs 3/5 members.
+### 4.1 — etcd backup & restore ✅ (the dark twin of Lab 1.4)
+Destroyed `/var/lib/etcd` and rebuilt the cluster from a verified snapshot (RTO ≈ 2 min).
+Full runbook: [`labs/4.1-etcd-backup-restore.md`](labs/4.1-etcd-backup-restore.md) · cron-able
+backup script: [`labs/etcd-backup.sh`](labs/etcd-backup.sh).
+- Proved **RPO** with two canaries: the one created after the snapshot was gone on restore.
+- Restore flags (`--name` / `--initial-cluster` / `--initial-advertise-peer-urls`) must match
+  the running etcd, or the member won't rejoin.
+- Single-node etcd is a SPOF (prod runs 3/5) — but quorum protects against node loss, not
+  corruption, so you still need verified snapshots + a tested runbook.
 
 ### 4.2 — Certificate expiry & rotation
 Deliberately expire an API server cert (from the PKI tree toured on Day 1), watch the
