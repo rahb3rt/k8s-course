@@ -14,6 +14,7 @@
       <div class="navgroup">Course</div>
       <a class="item" href="index.html"><span class="n">◇</span> Home</a>
       <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <a class="item" href="reference.html"><span class="n">▣</span> Reference</a>
       <div class="navgroup">Phase 1 · Foundations</div>
       <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
       <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
@@ -33,12 +34,13 @@
 
       <div class="card"><b>The bridge</b><p>Phase 1’s through-line was <em>“the API stores intent; something must enforce it”</em> — NetworkPolicy needs a policy CNI, a PVC needs a provisioner, a Deployment needs the controller-manager. That “something” is a <strong>controller</strong>. An operator observes controllers; <strong>an architect writes them.</strong> Every module closes with a <strong>decision framework</strong> — architecture is judgment, not trivia.</p></div>
 
-      <h2 id="a1">A1 · The Controller Pattern</h2>
+      <div class="pagehead"><h2 id="a1" style="margin:0;border:none">A1 · The Controller Pattern</h2><span class="chip ok">Built ✓</span></div>
       <p>The heart of Kubernetes and the operator→architect moment. Control theory: <strong>desired vs observed state</strong>, <strong>level-triggered</strong> (reconcile to truth) not edge-triggered (react to events), idempotent reconcile loops, the informer/work-queue machinery.</p>
       <h4 class="sub">You’ll build</h4>
       <p>First a ~20-line <strong>shell reconciler</strong> to feel the loop with zero framework, then a real <strong>CRD + controller with kubebuilder</strong> (controller-runtime) that reconciles a custom resource to reality — the same pattern kube-controller-manager uses.</p>
       <h4 class="sub">Decision framework</h4>
-      <p>When to reach for a controller/operator vs a Helm chart vs a Job. What belongs in an API vs config.</p>
+      <p>When to reach for a controller/operator vs a Helm chart vs a Job. What belongs in an API vs config. Rule: if it needs to <em>keep being true</em>, it's a controller.</p>
+      <div class="card ok"><b>Built ✓</b><p>A <code class="inl">ReplicaPin</code> CRD + controller (Go / kubebuilder) that pins a Deployment's replica count and self-heals drift — the same loop the ReplicaSet controller runs. Full lab: <code class="inl">architect-track/a1-controller-pattern/</code>.</p></div>
 
       <h2 id="a2">A2 · Extending the API</h2>
       <p>CRDs with schema validation &amp; versioning, <strong>admission webhooks</strong> (mutating + validating), finalizers, owner references &amp; garbage collection, the status subresource, and API aggregation. Policy-as-code with <strong>Kyverno / OPA Gatekeeper</strong>.</p>

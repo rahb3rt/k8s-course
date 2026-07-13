@@ -1,0 +1,13 @@
+# The custom resource — the typed version of the desired-state ConfigMap.
+# The API server validates it against the CRD schema (replicas >= 0), then your
+# controller reconciles deployment/web to spec.replicas.
+#   kubectl apply -f pin-web.yaml
+#   kubectl get replicapins
+apiVersion: ops.quarx.co/v1
+kind: ReplicaPin
+metadata:
+  name: pin-web
+  namespace: default
+spec:
+  deploymentName: web
+  replicas: 3

@@ -138,3 +138,26 @@ tbody tr:hover { background: #F0F3F9; }
   nav.side .navgroup { width: 100%; }
   main { padding: 32px 22px 64px; }
 }
+
+/* ---- Reference: architecture diagram ---- */
+.arch { display: grid; gap: 16px; margin: 22px 0; }
+@media (min-width: 760px) { .arch { grid-template-columns: 1fr 1fr; } }
+.plane { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.plane-h { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 10px 14px; background: #eef2f9; color: var(--accent-deep); border-bottom: 1px solid var(--line); }
+.plane.node .plane-h { color: var(--ok); background: #e9f4ee; }
+.comps { display: grid; gap: 8px; padding: 14px; }
+.comp { border: 1px solid var(--line-soft); border-left: 3px solid var(--accent); border-radius: 4px; padding: 8px 12px; }
+.plane.node .comp { border-left-color: var(--ok); }
+.comp b { font-family: var(--mono); font-size: 0.85rem; }
+.comp span { display: block; color: var(--ink-2); font-size: 0.85rem; margin-top: 2px; }
+.flow { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; margin: 16px 0; overflow-x: auto; line-height: 1.9; }
+.flow b { color: var(--accent-deep); }
+
+/* ---- Reference: definition list ---- */
+.defs { margin: 14px 0; }
+.def { display: grid; grid-template-columns: 190px 1fr; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.def .t { font-family: var(--mono); font-size: 0.84rem; color: var(--accent-deep); font-weight: 600; }
+.def .d { color: var(--ink-2); font-size: 0.94rem; }
+.def .d b { color: var(--ink); }
+@media (max-width: 620px) { .def { grid-template-columns: 1fr; gap: 2px; } }
+.when { font-size: 0.82rem; color: var(--ok); font-weight: 600; }

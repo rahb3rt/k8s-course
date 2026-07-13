@@ -17,6 +17,7 @@
       <div class="navgroup">Course</div>
       <a class="item active" href="index.html"><span class="n">◇</span> Home</a>
       <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <a class="item" href="reference.html"><span class="n">▣</span> Reference</a>
       <div class="navgroup">Phase 1 · Foundations</div>
       <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
       <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
@@ -43,7 +44,9 @@
           </tbody>
         </table>
       </div>
-      <p style="color:var(--ink-3);font-size:0.9rem;">Apple Silicon host · Lima/vz · Ubuntu 24.04 arm64 · Kubernetes v1.31 · containerd · Flannel · pod CIDR 10.244.0.0/16</p>
+      <p style="color:var(--ink-3);font-size:0.9rem;">Apple Silicon host · Lima/vz · Ubuntu 24.04 arm64 · Kubernetes v1.31 → v1.32 · containerd · Flannel · pod CIDR 10.244.0.0/16</p>
+
+      <div class="card"><b>Reference</b><p>Definitions and "when to use which" — Deployment vs StatefulSet vs DaemonSet, Service types, storage, a cluster-architecture diagram, and a glossary: <a href="reference.html">open the Reference →</a></p></div>
 
       <h2>Phase 1 — Operator Foundations</h2>
       <p>Internals, debugging, and production operations — the bedrock an architect reasons from. Each day: <em>concept → internals → hands-on lab → deliberate breakage → cold debug → takeaways.</em></p>
@@ -59,7 +62,7 @@
       <h2>Phase 2 — The Architect Track</h2>
       <p>From <em>using</em> the API to <em>extending</em> it. The through-line of Phase 1 — <strong>“the API stores intent; something must enforce it”</strong> — becomes the whole point: an operator observes controllers, <strong>an architect writes them.</strong> Operator builds are in <strong>Go + kubebuilder</strong>; coverage is full-spectrum across platform, product, and fleet architecture.</p>
       <div class="rail">
-        <a class="rcard" href="architect.html#a1"><div class="k">A1</div><div class="t">The Controller Pattern</div><div class="d">Reconciliation &amp; level-triggered control. Build a CRD + controller.</div></a>
+        <a class="rcard done" href="architect.html#a1"><div class="k">A1 · built ✓</div><div class="t">The Controller Pattern</div><div class="d">Built a ReplicaPin CRD + controller that self-heals drift.</div></a>
         <a class="rcard" href="architect.html#a2"><div class="k">A2</div><div class="t">Extending the API</div><div class="d">CRDs, admission webhooks, finalizers, policy-as-code.</div></a>
         <a class="rcard" href="architect.html#a3"><div class="k">A3</div><div class="t">Scaling &amp; Scheduling</div><div class="d">HPA/VPA/Karpenter, affinity, priority, capacity &amp; cost.</div></a>
         <a class="rcard" href="architect.html#a4"><div class="k">A4</div><div class="t">Platform Architecture</div><div class="d">CNI/ingress/mesh trade-offs, multi-tenancy models.</div></a>
