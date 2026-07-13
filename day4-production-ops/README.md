@@ -23,11 +23,12 @@ Rotated all leaf certs with the CAs left untouched. Full runbook:
   holds the old cert in memory) and refresh `admin.conf` into `~/.kube/config`.
 - `kubeadm upgrade` renews certs as a side effect → "upgrade yearly" *is* rotation.
 
-### 4.3 — Upgrades, drain, cordon & PDBs
-Move workloads off a node safely and roll a version bump.
-- `kubectl cordon` / `drain` (respecting PodDisruptionBudgets)
-- `kubeadm upgrade plan` / `apply`; upgrade kubelet per node
-- why a PDB can *block* a drain (and how to reason about it).
+### 4.3 — Upgrades, drain, cordon & PDBs ✅
+Watched a `minAvailable: 2` PDB block a drain (2 replicas, 1 worker → nowhere to go). Runbook:
+[`labs/4.3-drain-pdb-upgrades.md`](labs/4.3-drain-pdb-upgrades.md).
+- cordon → drain → PDB honored; DaemonSet pods skipped.
+- PDB + spare capacity + node spread = safe rolling upgrades; PDB without capacity = stuck drain.
+- Upgrade: control plane first, one minor at a time; kubelet lags apiserver ≤3 minors.
 
 ### 4.4 — Capstone: multi-fault incident
 Several failures injected at once. You drive the diagnosis (scaffolded), using the method
