@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 5 — Observability: Prometheus &amp; Grafana</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
+      <a class="item active" href="day5.html"><span class="n">D5</span> Observability <span class="st next"></span></a>
+      <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st todo"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 05</p><span class="chip next">In progress</span></div>
+      <h1>Observability: Prometheus &amp; Grafana</h1>
+      <p class="lede">Stop guessing what the cluster is doing. Deploy the <strong>kube-prometheus-stack</strong> (Prometheus + Grafana + Alertmanager + exporters) with Helm, and learn the pull-based metrics pipeline from scrape to dashboard.</p>
+
+      <h2>The metrics pipeline (the mental model)</h2>
+      <p>Prometheus is <strong>pull-based</strong>: it scrapes HTTP <code class="inl">/metrics</code> endpoints on a schedule and stores time series. The pieces:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>Component</th><th>Job</th></tr></thead>
+        <tbody>
+          <tr><td><b>node-exporter</b></td><td>Per-node DaemonSet — exposes host metrics (CPU, mem, disk, net).</td></tr>
+          <tr><td><b>kube-state-metrics</b></td><td>Turns API objects into metrics (pod phase, restarts, deploy replicas, PVC status).</td></tr>
+          <tr><td><b>Prometheus</b></td><td>Scrapes all targets, stores TSDB, evaluates alert rules. Query with PromQL.</td></tr>
+          <tr><td><b>ServiceMonitor / PodMonitor</b></td><td>CRDs that tell Prometheus <em>what</em> to scrape (a preview of Phase 2 — the API is extended with CRDs).</td></tr>
+          <tr><td><b>Alertmanager</b></td><td>Receives fired alerts, dedups/groups/routes them (to Slack, PagerDuty…).</td></tr>
+          <tr><td><b>Grafana</b></td><td>Dashboards over Prometheus (and other) data sources.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Segments (filled in as we go)</h2>
+      <div class="grid2">
+        <div class="card"><b>5.1 · Install Helm + the stack</b><p>Helm as the package manager; install <code class="inl">kube-prometheus-stack</code> from the prometheus-community chart.</p></div>
+        <div class="card"><b>5.2 · Reach Grafana</b><p>Port-forward in, log in, tour the pre-built cluster dashboards.</p></div>
+        <div class="card"><b>5.3 · Read your own history</b><p>PromQL for the pod restarts, OOMKills, and QoS you caused on Day 3 — see them as time series.</p></div>
+        <div class="card"><b>5.4 · Scrape a workload + an alert</b><p>A ServiceMonitor to scrape an app, and an alert rule that fires on a condition you trigger.</p></div>
+      </div>
+      <p style="color:var(--ink-3)">This page fills in with commands and findings as we complete each segment.</p>
+
+      <div class="prevnext">
+        <a href="day4.html"><span class="lbl">← Prev</span> Day 4 · Production Ops</a>
+        <a href="day6.html"><span class="lbl">Next →</span> Day 6 · Cluster Upgrade</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

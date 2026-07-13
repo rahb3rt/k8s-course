@@ -73,7 +73,9 @@ containing every YAML and script used, split out so you can re-run any lab stand
 | [1](day1-substrate-control-plane/README.md) | Substrate & control plane | ✅ | A container is 3 Linux primitives; the apiserver is etcd's only client |
 | [2](day2-networking/README.md) | Networking & the dataplane | ✅ | Services are iptables rules; here's a debugging *method* |
 | [3](day3-storage-lifecycle/README.md) | Storage, lifecycle & OOM | ✅ | How pods die, who the kernel kills, how data survives |
-| [4](day4-production-ops/README.md) | Production operations | ⏳ | Bring a dead cluster back from an etcd snapshot |
+| [4](day4-production-ops/README.md) | Production operations | ✅ | Resurrect a dead cluster; rotate certs; drains & PDBs; incident response |
+| [5](day5-observability/README.md) | Observability | ⏳ | Prometheus/Grafana + the pull-based metrics pipeline |
+| [6](day6-cluster-upgrade/README.md) | Cluster upgrades | ⏳ | A real kubeadm minor-version upgrade, node by node |
 
 **Phase 2 · [Architect Track](architect-track/README.md)** (A1–A7, upcoming)
 
