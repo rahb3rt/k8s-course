@@ -1,0 +1,9 @@
+# Local kube artifacts / secrets — never commit these
+*.kubeconfig
+admin.conf
+kubeconfig
+*.key
+*.crt
+*.pem
+etcd-snapshot*.db
+.DS_Store

@@ -1,0 +1,19 @@
+# Asks for 300Mi of memory under a 128Mi limit — a promise it cannot keep.
+# The cgroup memory limit triggers a per-container OOM kill: STATUS OOMKilled, exit 137
+# (=128+9, SIGKILL). This happens even when the node has plenty of free memory.
+#   kubectl apply -f oom-victim.yaml
+#   kubectl get pod oom-victim -w
+#   limactl shell worker -- 'sudo dmesg | grep -i "killed process" | tail'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-victim
+spec:
+  restartPolicy: Never
+  containers:
+    - name: c
+      image: python:3-alpine
+      command: ["python3", "-c", "print('allocating 300Mi...', flush=True); a=bytearray(300*1024*1024); print('survived', flush=True)"]
+      resources:
+        requests: {memory: 64Mi}
+        limits:   {memory: 128Mi}

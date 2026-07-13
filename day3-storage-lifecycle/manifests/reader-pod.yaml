@@ -1,0 +1,22 @@
+# A NEW pod that mounts the SAME `data` PVC and reads the note. Run it AFTER deleting the
+# writer pod to prove the data outlived the pod that wrote it.
+#   kubectl delete pod writer
+#   kubectl apply -f reader-pod.yaml
+#   kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/reader --timeout=60s
+#   kubectl logs reader     # prints the note written by the now-deleted writer
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reader
+spec:
+  restartPolicy: Never
+  containers:
+    - name: c
+      image: busybox:1.36
+      command: ["cat", "/data/note.txt"]
+      volumeMounts:
+        - {name: vol, mountPath: /data}
+  volumes:
+    - name: vol
+      persistentVolumeClaim:
+        claimName: data
