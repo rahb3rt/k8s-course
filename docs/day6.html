@@ -31,31 +31,88 @@
       <h1>Cluster Upgrades</h1>
       <p class="lede">The real, hands-on version of Day 4.3: take this cluster from one minor version to the next — control plane first, then each node — without dropping the workloads.</p>
 
-      <h2>The rules (version skew)</h2>
+      <h2>The rules (version skew) — never break these</h2>
       <ul>
-        <li><strong>One minor at a time.</strong> 1.31 → 1.32, never 1.31 → 1.33.</li>
-        <li><strong>Control plane leads, nodes follow.</strong> Upgrade the control plane first.</li>
-        <li><strong>kubelet may lag the API server by ≤ 3 minors, never lead it.</strong></li>
-        <li><strong>Drain before you upgrade a node</strong> — the Day-4.3 drill is step one of every node upgrade.</li>
+        <li><strong>One minor at a time.</strong> 1.31 → 1.32, never 1.31 → 1.33. To go up two minors you upgrade twice.</li>
+        <li><strong>Control plane leads, nodes follow.</strong> The API server must be on the new version before any node.</li>
+        <li><strong>kubelet may lag the API server by ≤ 3 minors, never lead it.</strong> This is what makes a mixed-version cluster (mid-upgrade) valid.</li>
+        <li><strong>Drain before you upgrade a node.</strong> The Day-4.3 drill is literally step one of every node upgrade.</li>
       </ul>
 
-      <h2>The upgrade, done (1.31.14 → 1.32.13)</h2>
-      <h4 class="sub">Control plane (cp)</h4>
-      <pre>sudo sed -i 's|/v1.31/|/v1.32/|' /etc/apt/sources.list.d/kubernetes.list ; sudo apt-get update
-sudo apt-mark unhold kubeadm &amp;&amp; sudo apt-get install -y kubeadm='1.32.*' &amp;&amp; sudo apt-mark hold kubeadm
-sudo kubeadm upgrade plan
-sudo kubeadm upgrade apply v1.32.13 -y          <span class="c"># swaps static pods + renews all certs</span>
-sudo apt-get install -y kubelet='1.32.*' kubectl='1.32.*' ; sudo systemctl restart kubelet</pre>
-      <h4 class="sub">Then each worker</h4>
-      <pre><span class="c"># on worker:</span> upgrade kubeadm ; sudo kubeadm upgrade node
-<span class="c"># on cp:</span>     kubectl drain lima-worker --ignore-daemonsets --delete-emptydir-data
-<span class="c"># on worker:</span> upgrade kubelet ; sudo systemctl restart kubelet
-<span class="c"># on cp:</span>     kubectl uncordon lima-worker ; kubectl get nodes   <span class="c"># ALL v1.32.13</span></pre>
+      <h2>Step 0 · Pre-flight (skip these and you get bitten)</h2>
+      <p>The upgrade command is the easy part. The failures happen because of what you <em>didn't</em> check first.</p>
       <div class="grid2">
-        <div class="card"><b>Mixed-version is valid</b><p>Mid-upgrade, cp ran 1.32 while the worker ran 1.31 — the skew rule (kubelet ≤3 minors behind, never ahead) is what makes rolling upgrades possible.</p></div>
-        <div class="card"><b>Capacity buys safety</b><p>Draining the only worker = a blip. ≥2 workers = zero downtime (pods reschedule). Same lesson as the Day-4.3 drain. Prometheus on emptyDir lost its data → prod needs a PVC.</p></div>
+        <div class="card crit"><b>Scan for removed APIs</b><p>Each minor <em>removes</em> old API versions. In a big cluster this silently breaks manifests/charts. Scan first: <code class="inl">pluto detect-all-in-cluster</code> or <code class="inl">kubent</code>, and fix every hit <em>before</em> upgrading. The #1 cause of "the upgrade broke half our services."</p></div>
+        <div class="card"><b>Read the release notes</b><p>Skim the target version's changelog for removals, deprecations, and behavioral changes. Two minutes that saves an outage.</p></div>
+        <div class="card"><b>Back up etcd</b><p>Day 4.1 — always snapshot before touching the control plane. <code class="inl">etcdctl snapshot save</code> + verify.</p></div>
+        <div class="card"><b>Check readiness</b><p>All nodes <code class="inl">Ready</code>, no pods pending, PDBs sane, and enough spare capacity for drains to reschedule (Day 4.3).</p></div>
       </div>
-      <p>Rollback: pre-upgrade manifests in <code class="inl">/etc/kubernetes/tmp/kubeadm-backup-manifests-*</code>. Runbook: <code class="inl">day6-cluster-upgrade/upgrade-runbook.md</code>.</p>
+      <pre>sudo cp -r /etc/kubernetes/pki /root/pki-backup-$(date +%s)   <span class="c"># cheap insurance</span>
+kubectl -n kube-system exec -i etcd-lima-cp -- etcdctl \
+  --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key \
+  snapshot save /var/lib/etcd/pre-upgrade.db &amp;&amp; sudo cp /var/lib/etcd/pre-upgrade.db /root/</pre>
+
+      <h2>Step 1 · Control plane (on cp)</h2>
+      <p>Upgrade the <b>kubeadm tool</b> first — it's what drives everything else. Then plan, apply, and finally the kubelet.</p>
+      <pre><span class="c"># 1a. Repoint the package repo to the new minor, then upgrade the kubeadm binary</span>
+sudo sed -i 's|/v1.31/|/v1.32/|' /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update
+apt-cache madison kubeadm | head          <span class="c"># find the exact patch, e.g. 1.32.13-1.1</span>
+sudo apt-mark unhold kubeadm
+sudo apt-get install -y kubeadm='1.32.*'
+sudo apt-mark hold kubeadm
+kubeadm version                            <span class="c"># confirm v1.32.x before continuing</span>
+
+<span class="c"># 1b. Plan — shows current vs target and every component it will touch. READ this table.</span>
+sudo kubeadm upgrade plan
+
+<span class="c"># 1c. Apply — use the EXACT version string (not a placeholder). This is the big step.</span>
+sudo kubeadm upgrade apply v1.32.13 -y</pre>
+      <div class="card"><b>What <code class="inl">upgrade apply</code> actually does</b><p>It pulls the new control-plane images and swaps the static pods <b>one at a time</b> — etcd → apiserver → controller-manager → scheduler — writing each new manifest into <code class="inl">/etc/kubernetes/manifests/</code> and backing up the old one to <code class="inl">/etc/kubernetes/tmp/kubeadm-backup-manifests-*</code> (your rollback). It also <b>renews every certificate</b> as a side effect (Day 4.2 for free). Ends with <code class="inl">SUCCESS! A control plane node ... was upgraded</code>.</p></div>
+      <pre><span class="c"># 1d. Upgrade this node's kubelet + kubectl, then restart the kubelet</span>
+sudo apt-mark unhold kubelet kubectl
+sudo apt-get install -y kubelet='1.32.*' kubectl='1.32.*'
+sudo apt-mark hold kubelet kubectl
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart kubelet
+kubectl get nodes     <span class="c"># cp -> v1.32.13; worker still 1.31 (a VALID mixed state)</span></pre>
+      <div class="card"><b>HA control plane (3+ cp nodes)</b><p>Run <code class="inl">kubeadm upgrade apply</code> on the <b>first</b> control-plane node only. On the <b>other</b> cp nodes run <code class="inl">kubeadm upgrade node</code> instead (no <code class="inl">apply</code>), then upgrade each one's kubelet. Do them one at a time so quorum never drops.</p></div>
+
+      <h2>Step 2 · Each worker (repeat / batch across the fleet)</h2>
+      <p>Now the nodes, one at a time (or in small batches, PDBs permitting). Every worker follows the same four moves:</p>
+      <pre><span class="c"># 2a. on the WORKER — repoint repo + upgrade kubeadm, then its local config</span>
+sudo sed -i 's|/v1.31/|/v1.32/|' /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update
+sudo apt-mark unhold kubeadm &amp;&amp; sudo apt-get install -y kubeadm='1.32.*' &amp;&amp; sudo apt-mark hold kubeadm
+sudo kubeadm upgrade node          <span class="c"># upgrades this node's kubelet config + certs</span>
+
+<span class="c"># 2b. on CP — drain the node so its pods move off (respects graceful shutdown + PDBs)</span>
+kubectl drain lima-worker --ignore-daemonsets --delete-emptydir-data
+<span class="c">#     single-worker lab -> pods go Pending until uncordon. Multi-worker -> they reschedule, zero downtime.</span>
+
+<span class="c"># 2c. on the WORKER — upgrade the kubelet + kubectl, restart</span>
+sudo apt-mark unhold kubelet kubectl &amp;&amp; sudo apt-get install -y kubelet='1.32.*' kubectl='1.32.*' &amp;&amp; sudo apt-mark hold kubelet kubectl
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart kubelet
+
+<span class="c"># 2d. on CP — return the node to service</span>
+kubectl uncordon lima-worker</pre>
+
+      <h2>Step 3 · Verify &amp; rollback</h2>
+      <pre>kubectl get nodes                    <span class="c"># EVERY node reports v1.32.13, all Ready</span>
+kubectl get pods -A -o wide          <span class="c"># everything rescheduled and Running</span></pre>
+      <div class="grid2">
+        <div class="card"><b>Rollback</b><p>Control-plane pods: restore from <code class="inl">/etc/kubernetes/tmp/kubeadm-backup-manifests-*</code>. Whole cluster: the etcd snapshot from Step 0 (Day 4.1). Nodes: cordon the bad one, shift workloads off, replace it.</p></div>
+        <div class="card crit"><b>At fleet scale, don't do this by hand</b><p>100 nodes → <b>managed node pools</b> (EKS/GKE/AKS, surge upgrades) or <b>Cluster API</b> (a <code class="inl">MachineDeployment</code> rolls nodes like a Deployment rolls pods). Blue-green new nodes, drain old, delete. See the fleet-upgrade Field Note.</p></div>
+      </div>
+
+      <h2>Gotchas</h2>
+      <ul>
+        <li><code class="inl">upgrade plan</code> will advertise newer minors (e.g. 1.36) — <b>ignore them</b>, target only the next minor.</li>
+        <li>The renewal/upgrade is a <b>no-op until the static pods restart</b> — files new, process old (same trap as cert rotation).</li>
+        <li>A stuck drain = a PodDisruptionBudget you can't satisfy → check <code class="inl">kubectl get pdb -A</code> and your capacity (Day 4.3).</li>
+        <li>On a cluster only hours old the cert <em>expiry year</em> won't visibly change on renewal — the timestamp does.</li>
+        <li>Node-local PVs (our <code class="inl">local-path</code>) don't follow a pod to a new node — network-attached storage does.</li>
+      </ul>
 
       <div class="prevnext">
         <a href="day5.html"><span class="lbl">← Prev</span> Day 5 · Observability</a>

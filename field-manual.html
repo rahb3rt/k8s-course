@@ -700,6 +700,16 @@ sudo apt install kubelet=1.32.* ; sudo systemctl restart kubelet
       <div class="take"><b>Fleet level</b><p>Many clusters &gt; one giant cluster. Upgrade in waves (canary → staging → prod) driven by GitOps (Argo/Flux); blue-green whole clusters for big jumps. Depth in Architect Track A3 (scaling) + A5 (fleet).</p></div>
     </div>
 
+    <h3 class="sub">Q · Blue-green node upgrades — does draining pods onto new nodes matter for my apps?</h3>
+    <p>The version bump is <b>invisible</b> to the app (the container never sees the kubelet version). What matters is the <b>reschedule</b>: pods aren't migrated, they're <b>deleted and recreated fresh</b> on the new nodes — new IP, cold cache, empty local disk.</p>
+    <div class="takes">
+      <div class="take"><b>Stateless + PDB + graceful = non-event</b><p>≥2 replicas + a PDB + node spread + SIGTERM handling &amp; readiness/preStop → the Service stays up and no requests drop. Just a rolling restart behind a stable ClusterIP.</p></div>
+      <div class="take crit"><b>Storage is the catch</b><p>A pod can only move if its PV can attach on the new node. Network-attached (EBS/NFS/CSI) reattaches; <b>node-local storage (our local-path) cannot follow</b> — those pods are pinned. Prod stateful workloads use network PVs.</p></div>
+      <div class="take"><b>Kubernetes handles routing</b><p>Endpoints follow the pods — clients using a Service never see the move. Only hardcoded pod IPs break.</p></div>
+      <div class="take"><b>What still stings</b><p>Cold starts (empty caches/pools) → a brief latency bump; readiness probes keep traffic off pods until they're warm.</p></div>
+    </div>
+    <p><b>Bottom line:</b> the upgrade mechanism is safe; <i>you</i> decide whether the reschedule is invisible or an incident — when you design the app (replicas, PDBs, graceful shutdown, network storage).</p>
+
     <h3 class="sub">Q · I'm on a Mac — does that change anything?</h3>
     <p>Kubernetes <i>is</i> Linux — namespaces &amp; cgroups are kernel features that don't exist on macOS. The Mac only <b>hosts</b> the Linux VMs (via Lima/vz). macOS runs <code class="inl">brew</code>, <code class="inl">limactl</code>, <code class="inl">kubectl</code>; everything <i>inside</i> the cluster (<code class="inl">kubeadm</code>, <code class="inl">crictl</code>, <code class="inl">etcdctl</code>, <code class="inl">iptables</code>) runs in the VMs. Any tool that "runs Kubernetes on a Mac" is quietly a Linux VM underneath.</p>
 
