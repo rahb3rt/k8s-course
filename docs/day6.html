@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 6 — Cluster Upgrades</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
+      <a class="item" href="day5.html"><span class="n">D5</span> Observability <span class="st next"></span></a>
+      <a class="item active" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st todo"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 06</p><span class="chip todo">Planned</span></div>
+      <h1>Cluster Upgrades</h1>
+      <p class="lede">The real, hands-on version of Day 4.3: take this cluster from one minor version to the next — control plane first, then each node — without dropping the workloads.</p>
+
+      <h2>The rules (version skew)</h2>
+      <ul>
+        <li><strong>One minor at a time.</strong> 1.31 → 1.32, never 1.31 → 1.33.</li>
+        <li><strong>Control plane leads, nodes follow.</strong> Upgrade the control plane first.</li>
+        <li><strong>kubelet may lag the API server by ≤ 3 minors, never lead it.</strong></li>
+        <li><strong>Drain before you upgrade a node</strong> — the Day-4.3 drill is step one of every node upgrade.</li>
+      </ul>
+
+      <h2>The flow (filled in as we run it)</h2>
+      <div class="grid2">
+        <div class="card"><b>6.1 · Plan</b><p>Bump the apt pin, <code class="inl">kubeadm upgrade plan</code> to see the target and preflight.</p></div>
+        <div class="card"><b>6.2 · Control plane</b><p><code class="inl">kubeadm upgrade apply v1.32.x</code> on cp — upgrades the static-pod components (and renews certs).</p></div>
+        <div class="card"><b>6.3 · The cp node</b><p>Drain cp, upgrade its <code class="inl">kubelet</code>/<code class="inl">kubectl</code> packages, restart, uncordon.</p></div>
+        <div class="card"><b>6.4 · The worker</b><p><code class="inl">kubeadm upgrade node</code>, drain, upgrade kubelet, uncordon. Repeat per worker in a real fleet.</p></div>
+      </div>
+      <p style="color:var(--ink-3)">This page fills in with commands and version output as we complete the upgrade.</p>
+
+      <div class="prevnext">
+        <a href="day5.html"><span class="lbl">← Prev</span> Day 5 · Observability</a>
+        <a href="architect.html"><span class="lbl">Next →</span> Phase 2 · Architect Track</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
