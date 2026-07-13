@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A1 — The Controller Pattern</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <a class="item" href="reference.html"><span class="n">▣</span> Reference</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
+      <a class="item" href="day5.html"><span class="n">D5</span> Observability <span class="st done"></span></a>
+      <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st done"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st next"></span></a>
+      <a class="item active" href="a1.html"><span class="n">A1</span> Controller Pattern <span class="st done"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 2 · A1</p><span class="chip ok">Built ✓</span></div>
+      <h1>The Controller Pattern</h1>
+      <p class="lede">The operator → architect crossing. Build a <strong>CRD + controller</strong> (Go + kubebuilder) that pins a Deployment's replica count and self-heals drift — the same loop the ReplicaSet controller and every operator runs.</p>
+
+      <h2>The reconciliation loop</h2>
+      <p>A controller is a loop that never ends: <strong>observe desired → observe actual → act to close the gap → repeat.</strong> Desired state = a spec you declare; observed = what's real; the controller drives observed toward desired.</p>
+      <div class="card"><b>Level-triggered, not edge-triggered</b><p><em>Edge</em> = react to events ("a pod was deleted → make one"); miss the event and you stay broken. <em>Level</em> = react to <em>state</em> ("whatever desired says, make it so"). Miss an event? The next loop reconciles to the current truth anyway. That's why controllers heal after a crash — they depend on state, not on a history of events.</p></div>
+
+      <h2>A1.1 · Feel the loop (15 lines of bash)</h2>
+      <p>Declare desired state in a ConfigMap, then run the whole pattern by hand. Scale <code class="inl">web</code> wrong in another terminal and watch it self-heal.</p>
+      <pre>kubectl create deployment web --image=nginx --replicas=2
+kubectl create configmap desired-state --from-literal=web-replicas=3
+
+while true; do
+  desired=$(kubectl get cm desired-state -o jsonpath='{.data.web-replicas}' 2>/dev/null)
+  actual=$(kubectl get deployment web -o jsonpath='{.spec.replicas}' 2>/dev/null)
+  if [ -n "$desired" ] &amp;&amp; [ "$desired" != "$actual" ]; then
+    echo "$(date +%T)  reconcile: web $actual -&gt; $desired"
+    kubectl scale deployment web --replicas="$desired"
+  fi
+  sleep 5      <span class="c"># the RequeueAfter of the shell world (level-triggered resync)</span>
+done</pre>
+
+      <h2>A1.2 · Scaffold a real operator (Go + kubebuilder)</h2>
+      <p>On <b>cp</b>. Work in the writable guest home <code class="inl">~</code> — <em>not</em> the read-only <code class="inl">/Users/…</code> Mac mount.</p>
+      <pre><span class="c"># toolchain</span>
+GOVER=$(curl -sL https://go.dev/VERSION?m=text | head -1)
+curl -sL https://go.dev/dl/${GOVER}.linux-arm64.tar.gz | sudo tar -C /usr/local -xzf -
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' &gt;&gt; ~/.bashrc &amp;&amp; source ~/.bashrc
+cd ~ &amp;&amp; curl -L -o kubebuilder https://go.kubebuilder.io/dl/latest/linux/arm64
+chmod +x kubebuilder &amp;&amp; sudo mv kubebuilder /usr/local/bin/
+sudo apt-get install -y make build-essential        <span class="c"># kubebuilder is Makefile-driven</span>
+
+<span class="c"># scaffold — group is 'ops', NOT 'apps' (built-in, would collide)</span>
+mkdir -p ~/replicapin-operator &amp;&amp; cd ~/replicapin-operator
+kubebuilder init --domain quarx.co --repo quarx.co/replicapin
+kubebuilder create api --group ops --version v1 --kind ReplicaPin --resource --controller</pre>
+
+      <h2>A1.3 · Design the Spec + write Reconcile</h2>
+      <p>In <code class="inl">api/v1/replicapin_types.go</code>, replace the placeholder <code class="inl">Foo</code> with real desired-state fields — the <code class="inl">+kubebuilder</code> markers become OpenAPI validation in the generated CRD:</p>
+      <pre>type ReplicaPinSpec struct {
+	// +required
+	DeploymentName string `json:"deploymentName"`
+
+	// +kubebuilder:validation:Minimum=0
+	// +required
+	Replicas int32 `json:"replicas"`
+}</pre>
+      <p>Then the reconcile loop in <code class="inl">internal/controller/replicapin_controller.go</code> — your bash loop, typed and hardened:</p>
+      <pre>func (r *ReplicaPinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	l := log.FromContext(ctx)
+
+	<span class="c">// OBSERVE desired — the ReplicaPin</span>
+	var pin opsv1.ReplicaPin
+	if err := r.Get(ctx, req.NamespacedName, &amp;pin); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	<span class="c">// OBSERVE actual — the target Deployment</span>
+	var dep appsv1.Deployment
+	key := types.NamespacedName{Namespace: pin.Namespace, Name: pin.Spec.DeploymentName}
+	if err := r.Get(ctx, key, &amp;dep); err != nil {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, client.IgnoreNotFound(err)
+	}
+	<span class="c">// COMPARE + ACT</span>
+	want := pin.Spec.Replicas
+	if dep.Spec.Replicas == nil || *dep.Spec.Replicas != want {
+		l.Info("reconcile: pinning replicas", "deployment", dep.Name, "to", want)
+		dep.Spec.Replicas = &amp;want
+		if err := r.Update(ctx, &amp;dep); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil   <span class="c">// level-triggered resync</span>
+}</pre>
+      <p>Add an RBAC marker so the controller may scale Deployments, then regenerate:</p>
+      <pre><span class="c">// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch</span>
+make generate &amp;&amp; make manifests   <span class="c"># markers → CRD schema + RBAC Role</span></pre>
+
+      <h2>A1.4 · Install, run, test</h2>
+      <pre>make install                       <span class="c"># register the CRD in the cluster</span>
+make run                           <span class="c"># start the controller (terminal 1)</span>
+
+<span class="c"># terminal 2 — create the custom resource:</span>
+kubectl apply -f - &lt;&lt;'EOF'
+apiVersion: ops.quarx.co/v1
+kind: ReplicaPin
+metadata: {name: pin-web, namespace: default}
+spec: {deploymentName: web, replicas: 3}
+EOF
+
+<span class="c"># drift test — healed by the RequeueAfter timer (~10s): we only WATCH the ReplicaPin</span>
+kubectl scale deploy web --replicas=1
+<span class="c"># desired-change test — healed INSTANTLY: a watch event on the ReplicaPin</span>
+kubectl patch replicapin pin-web --type=merge -p '{"spec":{"replicas":5}}'</pre>
+      <div class="card"><b>Watch vs. resync — the key lesson</b><p>Changing the <em>watched</em> object (the <code class="inl">ReplicaPin</code>) reconciles <b>instantly</b>; drift on an <em>unwatched</em> object (scaling the Deployment) waits for the <b>timer</b>. Production upgrade: add <code class="inl">.Owns(&amp;appsv1.Deployment{})</code> in <code class="inl">SetupWithManager</code> to watch the Deployment too, making both instant.</p></div>
+
+      <h2>Gotchas</h2>
+      <ul>
+        <li>Do dev work in the guest home <code class="inl">~</code> (<code class="inl">/home/…guest</code>). The <code class="inl">/Users/…</code> mount is <b>read-only</b> — <code class="inl">curl -o</code> and <code class="inl">go build</code> fail there.</li>
+        <li>API group <code class="inl">apps</code> is built-in and collides — use a custom group (<code class="inl">ops</code>).</li>
+        <li>kubebuilder needs <code class="inl">make</code> + <code class="inl">build-essential</code>; a minimal Ubuntu image ships neither.</li>
+        <li>Run <code class="inl">kubectl</code> from <b>cp</b> — the worker has no kubeconfig (<code class="inl">localhost:8080</code> error = no config).</li>
+        <li>Edit the Spec → always <code class="inl">make generate &amp;&amp; make manifests</code> to regenerate DeepCopy + CRD.</li>
+      </ul>
+
+      <h2>Decision framework — controller vs alternatives</h2>
+      <div class="grid2">
+        <div class="card"><b>Use a controller/operator</b><p>When custom state must be <em>continuously reconciled</em> — self-healing, drift correction, lifecycle management of your own resource type.</p></div>
+        <div class="card"><b>Use Helm / Kustomize / Job</b><p>Helm/Kustomize for one-shot templated installs; Job/CronJob for finite tasks. No ongoing loop.</p></div>
+      </div>
+      <p><b>Rule:</b> if it needs to <em>keep being true</em>, it's a controller. Full lab in the repo: <code class="inl">architect-track/a1-controller-pattern/</code>.</p>
+
+      <div class="prevnext">
+        <a href="architect.html"><span class="lbl">← Overview</span> Architect Track</a>
+        <a href="architect.html#a2"><span class="lbl">Next →</span> A2 · Extending the API</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

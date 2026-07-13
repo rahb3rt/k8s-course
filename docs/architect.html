@@ -24,6 +24,7 @@
       <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st done"></span></a>
       <div class="navgroup">Phase 2 · Architect</div>
       <a class="item active" href="architect.html"><span class="n">A</span> Architect Track <span class="st next"></span></a>
+      <a class="item" href="a1.html"><span class="n">A1</span> Controller Pattern <span class="st done"></span></a>
     </div>
   </nav>
   <main>
@@ -40,7 +41,7 @@
       <p>First a ~20-line <strong>shell reconciler</strong> to feel the loop with zero framework, then a real <strong>CRD + controller with kubebuilder</strong> (controller-runtime) that reconciles a custom resource to reality — the same pattern kube-controller-manager uses.</p>
       <h4 class="sub">Decision framework</h4>
       <p>When to reach for a controller/operator vs a Helm chart vs a Job. What belongs in an API vs config. Rule: if it needs to <em>keep being true</em>, it's a controller.</p>
-      <div class="card ok"><b>Built ✓</b><p>A <code class="inl">ReplicaPin</code> CRD + controller (Go / kubebuilder) that pins a Deployment's replica count and self-heals drift — the same loop the ReplicaSet controller runs. Full lab: <code class="inl">architect-track/a1-controller-pattern/</code>.</p></div>
+      <div class="card ok"><b>Built ✓</b><p>A <code class="inl">ReplicaPin</code> CRD + controller (Go / kubebuilder) that pins a Deployment's replica count and self-heals drift — the same loop the ReplicaSet controller runs. <a href="a1.html">Open the full A1 page →</a></p></div>
 
       <h2 id="a2">A2 · Extending the API</h2>
       <p>CRDs with schema validation &amp; versioning, <strong>admission webhooks</strong> (mutating + validating), finalizers, owner references &amp; garbage collection, the status subresource, and API aggregation. Policy-as-code with <strong>Kyverno / OPA Gatekeeper</strong>.</p>
