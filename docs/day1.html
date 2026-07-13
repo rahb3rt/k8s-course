@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 1 — Substrate &amp; the Control Plane</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item active" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 01</p><span class="chip ok">Complete</span></div>
+      <h1>Substrate &amp; the Control Plane</h1>
+      <p class="lede">Climb from below Kubernetes up: a container built by hand from Linux primitives, a control plane assembled from four files on disk, down to the protobuf bytes in etcd — then kill it and learn what “the cluster is down” really means.</p>
+
+      <h2>1 · A container is three Linux primitives</h2>
+      <p>There is no “container” — only Linux lying to a process with three things:</p>
+      <div class="grid2">
+        <div class="card"><b>Namespaces</b><p>What a process can <em>see</em> — pid, net, mnt, uts, ipc, user.</p></div>
+        <div class="card"><b>cgroups v2</b><p>What it can <em>use</em> — cpu, memory, io. The OOM killer consults these.</p></div>
+        <div class="card"><b>A pivoted rootfs</b><p>The unpacked OCI image it <code class="inl">pivot_root</code>s into.</p></div>
+        <div class="card"><b>That’s it</b><p>containerd just automates those three. No magic.</p></div>
+      </div>
+      <p><strong>Lab 1.1</strong> — build one by hand in the sandbox VM, no Docker:</p>
+      <pre>sudo unshare --pid --fork --mount-proc --uts --net --ipc --mount bash
+hostname isolated-box   <span class="c"># uts ns — host hostname unaffected</span>
+ps aux                  <span class="c"># pid ns — you are PID 1, you see almost nothing</span>
+ip addr                 <span class="c"># net ns — only 'lo', and it's DOWN</span>
+ls /                    <span class="c"># NOT isolated — no pivot_root, you see the whole VM</span></pre>
+      <div class="card"><b>Why this matters downstream</b><p><strong>PID 1</strong>: the kernel doesn’t apply default signal actions to PID 1, so an app ignoring SIGTERM strands pods in <code class="inl">Terminating</code> (Day 3). <strong>Empty netns</strong>: every pod starts exactly like that <code class="inl">lo</code>-only shell; the CNI wires it — no CNI → <code class="inl">ContainerCreating</code> (Day 2).</p></div>
+
+      <h2>2 · The bootstrap paradox → static pods</h2>
+      <p>The apiserver, scheduler, controller-manager, and etcd all run <em>as pods</em> — but pods are scheduled by the control plane that doesn’t exist yet. Resolution: <strong>static pods</strong>. The kubelet (a plain systemd service, <em>not</em> a pod) runs any manifest in <code class="inl">/etc/kubernetes/manifests/</code> directly.</p>
+      <pre>ls /etc/kubernetes/manifests/   <span class="c"># etcd · apiserver · controller-manager · scheduler</span>
+systemctl is-active kubelet     <span class="c"># active — the one thing that isn't a pod</span></pre>
+      <p>The kubelet also creates a read-only <strong>mirror pod</strong> in the API. The <strong>file is truth</strong>: <code class="inl">kubectl delete pod etcd-cp</code> → it reappears instantly. And they run <em>before</em> the CNI because <code class="inl">hostNetwork: true</code> — they use the node’s network, need no pod IP. That’s why a fresh node is <code class="inl">NotReady</code> yet the control plane is <code class="inl">Running</code>.</p>
+
+      <h2>3 · The PKI tree</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code class="inl">ca.crt / ca.key</code></td><td>Cluster root CA — everything chains to it</td></tr>
+          <tr><td><code class="inl">apiserver.crt</code></td><td>Serving cert; SANs include the advertise address</td></tr>
+          <tr><td><code class="inl">apiserver-etcd-client.*</code></td><td>Client cert to etcd — signed by the <em>separate</em> etcd CA</td></tr>
+          <tr><td><code class="inl">sa.key / sa.pub</code></td><td>Signs ServiceAccount tokens — leak <code class="inl">sa.key</code> = forge any identity</td></tr>
+          <tr><td><code class="inl">etcd/</code></td><td>etcd’s own CA + certs — its own trust domain</td></tr>
+        </tbody>
+      </table></div>
+      <p>Most security-critical: <code class="inl">sa.key</code>. Most availability-critical: <code class="inl">etcd/</code> + <code class="inl">/var/lib/etcd</code>.</p>
+
+      <h2>4 · etcd is truth; the apiserver is its only interpreter</h2>
+      <pre>ectl() { kubectl -n kube-system exec -i etcd-cp -- etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key "$@"; }
+
+ectl get /registry --prefix --keys-only | wc -l   <span class="c"># ~286 objects in an "empty" cluster</span>
+ectl get /registry/pods/kube-system/etcd-cp       <span class="c"># binary PROTOBUF, not JSON</span></pre>
+      <p>Objects are stored as protobuf; only the apiserver encodes/decodes it. That’s the technical reason “everything goes through the apiserver” is architecture, not etiquette. (The etcd image is <strong>distroless</strong> — no shell — so exec the <code class="inl">etcdctl</code> binary directly.)</p>
+
+      <h2>Breakage — kill etcd, debug with kubectl dead</h2>
+      <p>Move <code class="inl">etcd.yaml</code> out of the manifests dir → the kubelet stops etcd → the apiserver’s <code class="inl">/readyz</code> returns 500 and crash-loops → <code class="inl">kubectl</code> hangs. But the workloads on the worker <strong>keep serving the entire time.</strong> Recover by restoring the one file; <code class="inl">/var/lib/etcd</code> was never touched, so zero data is lost. Full walkthrough: <code class="inl">day1-substrate-control-plane/labs/1.4-etcd-breakage.md</code>.</p>
+
+      <h2>Takeaways</h2>
+      <div class="grid2">
+        <div class="card"><b>Container = 3 primitives</b><p>Namespaces + cgroups + rootfs. Every weird-pod bug bottoms out here.</p></div>
+        <div class="card"><b>Bootstraps from disk</b><p>Static pods dodge the CNI via <code class="inl">hostNetwork</code>. The file is truth.</p></div>
+        <div class="card"><b>etcd holds state; apiserver gives meaning</b><p>Protobuf in, YAML out. The apiserver is etcd’s sole client.</p></div>
+        <div class="card crit"><b>Control plane down ≠ workloads down</b><p><code class="inl">refused</code> = not listening; <code class="inl">timeout</code> = stuck on a dependency. Data outlives process.</p></div>
+      </div>
+
+      <div class="prevnext">
+        <a href="setup.html"><span class="lbl">← Prev</span> Setup</a>
+        <a href="day2.html"><span class="lbl">Next →</span> Day 2 · Networking &amp; the Dataplane</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

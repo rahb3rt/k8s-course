@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 3 — Storage, Lifecycle &amp; the OOM Killer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item active" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 03</p><span class="chip ok">Complete</span></div>
+      <h1>Storage, Lifecycle &amp; the OOM Killer</h1>
+      <p class="lede">State and time: how pods are torn down, who the kernel kills under memory pressure, and how data outlives the pod that wrote it.</p>
+
+      <h2>1 · How a pod dies</h2>
+      <p>Graceful shutdown sequence on <code class="inl">kubectl delete</code>:</p>
+      <ol>
+        <li>Pod gets a <code class="inl">deletionTimestamp</code> → <code class="inl">Terminating</code>.</li>
+        <li><strong>In parallel:</strong> removed from Service endpoints <em>and</em> shutdown begins.</li>
+        <li><code class="inl">preStop</code> hook runs (if any).</li>
+        <li>Runtime sends <strong>SIGTERM</strong> to PID 1.</li>
+        <li>Kubelet waits up to <strong><code class="inl">terminationGracePeriodSeconds</code></strong> (default 30).</li>
+        <li>Still alive? <strong>SIGKILL.</strong></li>
+      </ol>
+      <pre>kubectl apply -f manifests/stubborn-pod.yaml   <span class="c"># PID 1 ignores SIGTERM (trap "" TERM)</span>
+time kubectl delete pod stubborn               <span class="c"># ~30s — waited out the grace period</span></pre>
+      <div class="card"><b>The nastier cousin</b><p>Endpoint removal <em>races</em> shutdown. A <em>fast-exiting</em> app can be dead while some node’s iptables still lists it → 502s mid-rollout. Fix: a <code class="inl">preStop</code> sleep (~5–10s) so it keeps serving during the drain window.</p></div>
+
+      <h2>2 · QoS &amp; the OOM killer</h2>
+      <p>QoS class is <em>derived</em> from requests/limits and becomes an <code class="inl">oom_score_adj</code> the kernel reads:</p>
+      <div class="twrap"><table>
+        <thead><tr><th>QoS</th><th>Rule</th><th>oom_score_adj</th><th>Killed</th></tr></thead>
+        <tbody>
+          <tr><td>Guaranteed</td><td>requests == limits</td><td>-997</td><td>last (near-immune)</td></tr>
+          <tr><td>Burstable</td><td>some requests/limits</td><td>2–999</td><td>middle</td></tr>
+          <tr><td>BestEffort</td><td>nothing set</td><td>1000</td><td><strong>first</strong></td></tr>
+        </tbody>
+      </table></div>
+      <pre>kubectl apply -f manifests/qos-pods.yaml
+kubectl exec qos-guaranteed -- cat /proc/1/oom_score_adj   <span class="c"># -997</span>
+kubectl apply -f manifests/oom-victim.yaml                 <span class="c"># asks 300Mi under a 128Mi limit</span>
+kubectl get pod oom-victim -w                              <span class="c"># OOMKilled, exit 137 (=128+9)</span></pre>
+      <div class="grid2">
+        <div class="card crit"><b>Per-container OOM</b><p>Exceeded your own <code class="inl">limits.memory</code> → deterministic cgroup kill, QoS-irrelevant. Raise the limit or fix the leak.</p></div>
+        <div class="card crit"><b>Node-level OOM</b><p>Node is full → kubelet <em>evicts</em> by QoS (BestEffort first) before the kernel kills by <code class="inl">oom_score_adj</code>.</p></div>
+      </div>
+
+      <h2>3 · Storage — a claim needs an actor</h2>
+      <p>Chain: <code class="inl">Pod → PVC (claim) → PV (volume) → StorageClass → provisioner</code>. Same pattern as NetworkPolicy — a claim is inert until a provisioner exists.</p>
+      <pre>kubectl apply -f manifests/pvc-data.yaml
+kubectl get pvc data          <span class="c"># Pending — no provisioner yet</span>
+<span class="c"># install local-path (see manifests/local-path-provisioner.md), then:</span>
+kubectl apply -f manifests/writer-pod.yaml   <span class="c"># a consumer → triggers WaitForFirstConsumer binding</span>
+kubectl delete pod writer
+kubectl apply -f manifests/reader-pod.yaml   <span class="c"># NEW pod reads the note → data survived</span></pre>
+      <div class="card"><b>Reclaim-policy footgun</b><p><code class="inl">kubectl get pv</code> shows <code class="inl">Delete</code> (default for dynamic volumes) → deleting the PVC destroys the data. For databases, use <code class="inl">Retain</code>.</p></div>
+
+      <h2>4 · StatefulSets — stable identity</h2>
+      <p>Deployments give anonymous cattle. Databases need ordinal names, per-pod private storage, ordered lifecycle, and per-pod DNS (headless Service).</p>
+      <pre>kubectl apply -f manifests/statefulset-sts.yaml
+kubectl get pods -l app=sts -w   <span class="c"># sts-0 Ready BEFORE sts-1 (ordered)</span>
+kubectl delete pod sts-0
+kubectl logs sts-0               <span class="c"># boot.log has TWO lines — same name, same volume</span></pre>
+
+      <h2>Takeaways</h2>
+      <div class="grid2">
+        <div class="card"><b>Termination is a deadline</b><p>SIGTERM → grace → SIGKILL. Watch the endpoint-removal race.</p></div>
+        <div class="card crit"><b>Two OOMs</b><p>Per-container limit (deterministic) vs node-level (QoS-ordered). Set requests.</p></div>
+        <div class="card"><b>A claim needs a provisioner</b><p><code class="inl">WaitForFirstConsumer</code> delays binding to a consumer.</p></div>
+        <div class="card"><b>StatefulSets = stable identity</b><p>Ordinal names, private PVCs, ordered lifecycle, per-pod DNS.</p></div>
+      </div>
+
+      <div class="prevnext">
+        <a href="day2.html"><span class="lbl">← Prev</span> Day 2 · Networking</a>
+        <a href="day4.html"><span class="lbl">Next →</span> Day 4 · Production Operations</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup — Bootstrap the cluster</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item active" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <p class="eyebrow">Setup</p>
+      <h1>Bootstrap the cluster from zero</h1>
+      <p class="lede">A 2-node <code class="inl">kubeadm</code> cluster on an Apple Silicon Mac using Lima VMs.</p>
+
+      <h2>0 · Prerequisites (Mac)</h2>
+      <pre><span class="c"># Kubernetes is Linux — the Mac only HOSTS the Linux VMs.</span>
+brew install lima kubectl</pre>
+
+      <h2>1 · Create the VMs</h2>
+      <p>Two Ubuntu 24.04 arm64 VMs on Apple’s hypervisor (<code class="inl">vz</code>), joined to Lima’s <code class="inl">user-v2</code> network so they can reach <strong>each other</strong>.</p>
+      <pre>limactl start --name=cp     --vm-type=vz --tty=false \
+  --set '.cpus=2 | .memory="4GiB" | .disk="20GiB" | .networks=[{"lima":"user-v2"}]' \
+  template://ubuntu-24.04
+limactl start --name=worker --vm-type=vz --tty=false \
+  --set '.cpus=2 | .memory="4GiB" | .disk="20GiB" | .networks=[{"lima":"user-v2"}]' \
+  template://ubuntu-24.04
+limactl shell cp -- ping -c3 192.168.104.3   <span class="c"># prove VM-to-VM connectivity</span></pre>
+
+      <h2>2 · Prepare both nodes</h2>
+      <p><code class="inl">setup/node-prep.sh</code> disables swap, loads kernel modules, sets the bridge sysctls, installs containerd (with the critical <code class="inl">SystemdCgroup = true</code>), and installs kube* 1.31.</p>
+      <pre>limactl shell cp     -- sudo bash &lt; node-prep.sh
+limactl shell worker -- sudo bash &lt; node-prep.sh</pre>
+      <div class="card"><b>Two lines to actually read</b><p><code class="inl">SystemdCgroup = true</code> (cgroup-driver mismatch = crash-looping kubelet) and <code class="inl">bridge-nf-call-iptables</code> (off = Services silently don’t route). Also installs <code class="inl">conntrack</code>/<code class="inl">socat</code> — kubeadm treats missing conntrack as a fatal preflight.</p></div>
+
+      <h2>3 · Init the control plane (cp)</h2>
+      <pre>limactl shell cp -- sudo kubeadm init \
+  --apiserver-advertise-address=192.168.104.1 \
+  --pod-network-cidr=10.244.0.0/16 \
+  --kubernetes-version=stable-1.31</pre>
+      <ul>
+        <li><strong>advertise-address</strong> must be cp’s <code class="inl">user-v2</code> IP — it’s baked into the apiserver cert SAN. Wrong value → TLS failures from the worker.</li>
+        <li><strong>pod CIDR</strong> is Flannel’s default <em>and</em> disjoint from the node net (overlapping CIDRs = nasty routing bug).</li>
+      </ul>
+      <p>Save the <code class="inl">kubeadm join …</code> line it prints.</p>
+
+      <h2>4 · Wire up kubectl (cp)</h2>
+      <pre>mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+kubectl get nodes    <span class="c"># NotReady until CNI installed — expected</span></pre>
+
+      <h2>5 · Install the CNI (Flannel)</h2>
+      <pre>kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+kubectl get nodes -w   <span class="c"># cp flips to Ready in ~30s</span></pre>
+
+      <h2>6 · Join the worker</h2>
+      <pre>limactl shell worker -- sudo kubeadm join 192.168.104.1:6443 \
+  --token &lt;TOKEN&gt; --discovery-token-ca-cert-hash sha256:&lt;HASH&gt;</pre>
+
+      <h4 class="sub">Lifecycle</h4>
+      <pre>limactl stop  cp worker sandbox   <span class="c"># free RAM (state persists)</span>
+limactl start cp worker           <span class="c"># resume intact</span></pre>
+
+      <div class="prevnext">
+        <a href="index.html"><span class="lbl">← Prev</span> Home</a>
+        <a href="day1.html"><span class="lbl">Next →</span> Day 1 · Substrate &amp; Control Plane</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes from the Ground Up — SRE → Architect Field Manual</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html">
+      <div class="logo">⎈ K8s Field Manual</div>
+      <div class="sub">SRE → Architect</div>
+    </a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item active" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <p class="eyebrow">SRE Track · Field Manual</p>
+      <h1>Kubernetes from the Ground Up</h1>
+      <p class="lede">A hands-on internals curriculum built on a real <code class="inl">kubeadm</code> cluster — where every component gets dissected, deliberately broken, and debugged. Then you cross from operating Kubernetes to <strong>architecting</strong> it.</p>
+
+      <div class="twrap">
+        <table>
+          <thead><tr><th>Role</th><th>VM</th><th>IP</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>control-plane</td><td><code class="inl">cp</code></td><td>192.168.104.1</td><td>tainted NoSchedule</td></tr>
+            <tr><td>worker</td><td><code class="inl">worker</code></td><td>192.168.104.3</td><td>runs the workloads</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--ink-3);font-size:0.9rem;">Apple Silicon host · Lima/vz · Ubuntu 24.04 arm64 · Kubernetes v1.31 · containerd · Flannel · pod CIDR 10.244.0.0/16</p>
+
+      <h2>Phase 1 — Operator Foundations</h2>
+      <p>Internals, debugging, and production operations — the bedrock an architect reasons from. Each day: <em>concept → internals → hands-on lab → deliberate breakage → cold debug → takeaways.</em></p>
+      <div class="rail c4">
+        <a class="rcard done" href="day1.html"><div class="k">Day 01 · done</div><div class="t">Substrate &amp; Control Plane</div><div class="d">Containers by hand, static pods, etcd, the PKI tree.</div></a>
+        <a class="rcard done" href="day2.html"><div class="k">Day 02 · done</div><div class="t">Networking &amp; Dataplane</div><div class="d">VXLAN, Services as iptables, a debugging method.</div></a>
+        <a class="rcard done" href="day3.html"><div class="k">Day 03 · done</div><div class="t">Storage · Lifecycle · OOM</div><div class="d">Termination, QoS/OOM, PV/PVC, StatefulSets.</div></a>
+        <a class="rcard next" href="day4.html"><div class="k">Day 04 · next</div><div class="t">Production Operations</div><div class="d">etcd restore, cert rotation, upgrades, drains.</div></a>
+      </div>
+
+      <h2>Phase 2 — The Architect Track</h2>
+      <p>From <em>using</em> the API to <em>extending</em> it. The through-line of Phase 1 — <strong>“the API stores intent; something must enforce it”</strong> — becomes the whole point: an operator observes controllers, <strong>an architect writes them.</strong> Operator builds are in <strong>Go + kubebuilder</strong>; coverage is full-spectrum across platform, product, and fleet architecture.</p>
+      <div class="rail">
+        <a class="rcard" href="architect.html#a1"><div class="k">A1</div><div class="t">The Controller Pattern</div><div class="d">Reconciliation &amp; level-triggered control. Build a CRD + controller.</div></a>
+        <a class="rcard" href="architect.html#a2"><div class="k">A2</div><div class="t">Extending the API</div><div class="d">CRDs, admission webhooks, finalizers, policy-as-code.</div></a>
+        <a class="rcard" href="architect.html#a3"><div class="k">A3</div><div class="t">Scaling &amp; Scheduling</div><div class="d">HPA/VPA/Karpenter, affinity, priority, capacity &amp; cost.</div></a>
+        <a class="rcard" href="architect.html#a4"><div class="k">A4</div><div class="t">Platform Architecture</div><div class="d">CNI/ingress/mesh trade-offs, multi-tenancy models.</div></a>
+        <a class="rcard" href="architect.html#a5"><div class="k">A5</div><div class="t">Delivery &amp; Fleet</div><div class="d">GitOps, Helm/Kustomize, progressive delivery, multi-cluster.</div></a>
+        <a class="rcard" href="architect.html#a6"><div class="k">A6</div><div class="t">Reliability &amp; Security</div><div class="d">DR/Velero, RBAC/PSA, supply chain, secrets, observability.</div></a>
+        <a class="rcard" href="architect.html#a7"><div class="k">A7</div><div class="t">Capstone Design Review</div><div class="d">Produce and defend a full reference architecture.</div></a>
+      </div>
+
+      <h2>The debugging method</h2>
+      <p>Works on any “X can’t reach Y.” This is the reusable crank you turn instead of guessing.</p>
+      <ol>
+        <li><strong>Reproduce</strong> — see the failure yourself before touching anything.</li>
+        <li><strong>Narrow</strong> — change one variable to halve it (all traffic or one port? cross-node or same-node? one pod or all?).</li>
+        <li><strong>Walk the path</strong> — follow the request/packet/process hop by hop; find where it stops.</li>
+        <li><strong>Inspect at the break</strong> — routes, iptables, logs, cgroups — wherever step 3 pointed.</li>
+        <li><strong>Fix &amp; verify the original symptom</strong> — not a proxy metric; the thing the user reported.</li>
+      </ol>
+
+      <div class="card"><b>Visual tracker</b><p>Prefer the card-based progress view? <a href="field-manual.html">Open the field manual →</a></p></div>
+
+      <div class="footer"><span>Kubernetes SRE → Architect Field Manual</span><span>Phase 1: 3/4 · Phase 2: planned</span></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
