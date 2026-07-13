@@ -18,16 +18,16 @@
       <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
       <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
       <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
-      <a class="item active" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <a class="item active" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
       <div class="navgroup">Phase 2 · Architect</div>
-      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st next"></span></a>
     </div>
   </nav>
   <main>
     <div class="content">
-      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 04</p><span class="chip next">Up next</span></div>
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 04</p><span class="chip ok">Complete</span></div>
       <h1>Production Operations</h1>
-      <p class="lede">The drills that separate people who <em>run</em> clusters from people who deploy to them. This page fills in with commands as we do each lab.</p>
+      <p class="lede">The drills that separate people who <em>run</em> clusters from people who deploy to them: resurrect a dead cluster from a snapshot, rotate expired certs, drain safely under a PDB, and clear a multi-fault incident cold.</p>
 
       <div class="pagehead"><h2 style="margin:0;border:none">4.1 · etcd backup &amp; restore</h2><span class="chip ok">Done</span></div>
       <p>The dark twin of Day 1’s breakage. There you stopped etcd’s <em>process</em> and lost nothing. Here you <strong>destroyed its data</strong> (<code class="inl">rm -rf /var/lib/etcd</code>) and rebuilt the whole cluster from a snapshot — measured <strong>RTO ≈ 2 min</strong>.</p>
@@ -60,8 +60,9 @@ kubectl drain lima-worker --ignore-daemonsets --delete-emptydir-data
 kubeadm upgrade plan ; kubeadm upgrade apply v1.31.x   <span class="c"># control plane first, one minor at a time</span></pre>
       <div class="card"><b>Design rule</b><p>PDB + spare capacity + spread across nodes = safe rolling upgrades. PDB without capacity = a node that won’t drain. kubelet may lag the apiserver ≤3 minors, never lead. Runbook: <code class="inl">labs/4.3-drain-pdb-upgrades.md</code>.</p></div>
 
-      <h2>4.4 · Capstone — multi-fault incident</h2>
-      <p>Several failures at once, you drive the diagnosis (scaffolded), using the method and the whole toolkit from Days 1–3.</p>
+      <div class="pagehead"><h2 style="margin:0;border:none">4.4 · Capstone — multi-fault incident</h2><span class="chip ok">Done</span></div>
+      <p>Two independent faults injected at once, diagnosed cold: a <strong>Deployment stuck Pending</strong> (100Gi request → <code class="inl">FailedScheduling</code>, a wedged rollout) and a <strong>silent DNS outage</strong> (CoreDNS scaled to 0). Triage → separate the problems → root-cause each → fix → verify the <em>real</em> symptom.</p>
+      <div class="card"><b>What closed it</b><p>Triage separated the two problems; “what’s <em>missing</em>” caught the silent CoreDNS fault; the <code class="inl">FailedScheduling</code> event handed over the scheduling cause; response-vs-hang and verify-the-symptom confirmed both fixes. Scripts: <code class="inl">labs/4.4-capstone-break.sh</code> / <code class="inl">-reset.sh</code>.</p></div>
 
       <div class="card"><b>Optional side-quest</b><p>Install <strong>Calico</strong> policy enforcement so the Day-2 <code class="inl">deny-web</code> NetworkPolicy actually bites — watch the same <code class="inl">wget</code> that succeeded under Flannel start timing out.</p></div>
 
