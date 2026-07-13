@@ -43,10 +43,14 @@ sudo etcdutl snapshot restore backup.db \      <span class="c"># flags MUST matc
       </div>
       <p>Full runbook: <code class="inl">day4-production-ops/labs/4.1-etcd-backup-restore.md</code> · cron-able backup: <code class="inl">etcd-backup.sh</code></p>
 
-      <h2>4.2 · Certificate expiry &amp; rotation</h2>
-      <p>Deliberately expire an API server cert (from the PKI tree toured on Day 1), watch the cluster lock <em>itself</em> out, then rotate.</p>
-      <pre>kubeadm certs check-expiration
-kubeadm certs renew all        <span class="c"># then restart control-plane static pods + refresh kubeconfigs</span></pre>
+      <div class="pagehead"><h2 style="margin:0;border:none">4.2 · Certificate expiry &amp; rotation</h2><span class="chip ok">Done</span></div>
+      <p>kubeadm leaf certs expire in <strong>1 year</strong>; the CAs last <strong>~10</strong>. A cluster left un-upgraded for a year locks <em>itself</em> out — <code class="inl">x509: certificate has expired</code>. Rotation re-signs the leaves with the <strong>same CAs</strong>, so nothing else has to change.</p>
+      <pre>sudo kubeadm certs check-expiration    <span class="c"># leaf ~364d · CA ~9-10y</span>
+sudo kubeadm certs renew all           <span class="c"># reissue every leaf</span>
+<span class="c"># GOTCHA: restart the static pods — the running apiserver holds the OLD cert in memory</span>
+sudo mv /etc/kubernetes/manifests{,.off} &amp;&amp; sleep 20 &amp;&amp; sudo mv /etc/kubernetes/manifests{.off,}
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config   <span class="c"># refresh your kubeconfig too</span></pre>
+      <div class="card"><b>Architect's insight</b><p><code class="inl">kubeadm upgrade</code> renews these certs as a side effect — so “upgrade at least yearly” <em>is</em> your rotation mechanism. Un-upgraded clusters are cert time-bombs. Full runbook: <code class="inl">labs/4.2-cert-rotation.md</code>.</p></div>
 
       <h2>4.3 · Upgrades, drain, cordon &amp; PDBs</h2>
       <p>Move workloads off a node safely and roll a version bump — and see how a PodDisruptionBudget can <em>block</em> a drain.</p>

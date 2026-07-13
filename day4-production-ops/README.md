@@ -15,12 +15,13 @@ backup script: [`labs/etcd-backup.sh`](labs/etcd-backup.sh).
 - Single-node etcd is a SPOF (prod runs 3/5) — but quorum protects against node loss, not
   corruption, so you still need verified snapshots + a tested runbook.
 
-### 4.2 — Certificate expiry & rotation
-Deliberately expire an API server cert (from the PKI tree toured on Day 1), watch the
-cluster lock *itself* out, then rotate certs back to health.
-- `kubeadm certs check-expiration`
-- `kubeadm certs renew all` + restart control-plane static pods
-- update kubeconfigs.
+### 4.2 — Certificate expiry & rotation ✅
+Rotated all leaf certs with the CAs left untouched. Full runbook:
+[`labs/4.2-cert-rotation.md`](labs/4.2-cert-rotation.md).
+- Two tiers: leaf certs ~1yr, CAs ~10yr. Rotation re-signs leaves with the same CAs.
+- Gotcha: `renew all` is a no-op until you **restart the static pods** (running apiserver
+  holds the old cert in memory) and refresh `admin.conf` into `~/.kube/config`.
+- `kubeadm upgrade` renews certs as a side effect → "upgrade yearly" *is* rotation.
 
 ### 4.3 — Upgrades, drain, cordon & PDBs
 Move workloads off a node safely and roll a version bump.
