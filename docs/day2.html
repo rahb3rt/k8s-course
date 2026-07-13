@@ -40,6 +40,13 @@
       <p>The routing table <em>is</em> the decision:</p>
       <pre>10.244.1.0/24 dev cni0                          <span class="c"># this node's pods → bridge (local)</span>
 10.244.0.0/24 via 10.244.0.0 dev flannel.1 ...  <span class="c"># other node's pods → VXLAN tunnel</span></pre>
+      <h4 class="sub">Map it on your cluster</h4>
+      <pre>kubectl apply -f manifests/netlab.yaml   <span class="c"># busybox test pod (ping/wget/nslookup)</span>
+kubectl get pods -o wide                 <span class="c"># note pod IPs + which node each is on</span>
+<span class="c"># on the WORKER:</span>
+ip -brief addr    <span class="c"># cni0 (bridge) · flannel.1 (VXLAN) · a veth@ifN per pod</span>
+ip route          <span class="c"># the local-vs-overlay decision, in two lines</span>
+sudo cat /etc/cni/net.d/10-flannel.conflist   <span class="c"># the CNI plugin chain (flannel → bridge → portmap)</span></pre>
 
       <h2>2 · Trace the packet (two layers, one ping)</h2>
       <pre><span class="c"># Worker term 1 — the WIRE (encapsulated):</span>  sudo tcpdump -ni eth0 udp port 8472
@@ -65,6 +72,17 @@ sudo iptables-save -t nat | grep KUBE-SVC-xxxx      <span class="c"># probabilit
           <tr><td>Fix &amp; verify</td><td>remove rule, re-test <strong>DNS</strong></td><td>incident closed</td></tr>
         </tbody>
       </table></div>
+      <pre><span class="c"># inject: drop inbound VXLAN on the worker</span>
+limactl shell worker -- sudo iptables -I INPUT 1 -p udp --dport 8472 -j DROP
+<span class="c"># reproduce + narrow (from cp):</span>
+kubectl exec netlab -- ping -c3 -W2 &lt;cp-pod-IP&gt;       <span class="c"># cross-node → 100% loss</span>
+kubectl exec netlab -- ping -c3 -W2 &lt;same-node-pod&gt;   <span class="c"># same-node → works</span>
+<span class="c"># walk the path (worker, 2 terms): reply shows on eth0 but never on flannel.1 → dropped in INPUT</span>
+sudo tcpdump -ni eth0 udp port 8472   ;   sudo tcpdump -ni flannel.1 icmp
+<span class="c"># inspect + fix (worker):</span>
+sudo iptables -L INPUT -n -v --line-numbers          <span class="c"># find the DROP udp dpt:8472 (climbing counter)</span>
+sudo iptables -D INPUT -p udp --dport 8472 -j DROP   <span class="c"># fix</span>
+kubectl exec netlab -- nslookup kubernetes.default.svc.cluster.local  <span class="c"># verify the REAL symptom (DNS)</span></pre>
       <div class="card"><b>Real-world signature</b><p>Same-node OK + cross-node broken + DNS timeouts = a firewall / security group blocking the overlay port (8472 Flannel VXLAN, 4789 std VXLAN, 179 Calico BGP).</p></div>
 
       <h2>NetworkPolicy does nothing (under Flannel)</h2>

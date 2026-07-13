@@ -33,12 +33,27 @@
 
       <div class="pagehead"><h2 style="margin:0;border:none">4.1 · etcd backup &amp; restore</h2><span class="chip ok">Done</span></div>
       <p>The dark twin of Day 1’s breakage. There you stopped etcd’s <em>process</em> and lost nothing. Here you <strong>destroyed its data</strong> (<code class="inl">rm -rf /var/lib/etcd</code>) and rebuilt the whole cluster from a snapshot — measured <strong>RTO ≈ 2 min</strong>.</p>
-      <pre>etcdctl snapshot save backup.db                <span class="c"># verified with: etcdutl snapshot status</span>
-sudo etcdutl snapshot restore backup.db \      <span class="c"># flags MUST match the running etcd:</span>
-  --name=lima-cp \
-  --initial-cluster=lima-cp=https://192.168.104.1:2380 \
-  --initial-advertise-peer-urls=https://192.168.104.1:2380 \
-  --data-dir=/var/lib/etcd</pre>
+      <pre><span class="c"># 1. plant a canary, take a VERIFIED snapshot, move it to safety</span>
+kubectl create configmap canary-before --from-literal=when=before
+kubectl -n kube-system exec -i etcd-lima-cp -- etcdctl \
+  --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key \
+  snapshot save /var/lib/etcd/backup.db
+sudo cp /var/lib/etcd/backup.db /root/etcd-backup.db
+kubectl create configmap canary-after --from-literal=when=after   <span class="c"># doomed: created after the snapshot</span>
+
+<span class="c"># 2. DISASTER: stop the control plane, destroy the data</span>
+sudo mv /etc/kubernetes/manifests /etc/kubernetes/manifests.off   <span class="c"># kubelet stops static pods</span>
+sudo rm -rf /var/lib/etcd
+
+<span class="c"># 3. RESTORE (etcdutl on the host; flags MUST match the running etcd)</span>
+sudo etcdutl snapshot restore /root/etcd-backup.db \
+  --name=lima-cp --initial-cluster=lima-cp=https://192.168.104.1:2380 \
+  --initial-advertise-peer-urls=https://192.168.104.1:2380 --data-dir=/var/lib/etcd
+
+<span class="c"># 4. REVIVE + verify — canary-before survives, canary-after is GONE (= your RPO)</span>
+sudo mv /etc/kubernetes/manifests.off /etc/kubernetes/manifests
+kubectl get nodes ; kubectl get cm</pre>
       <div class="grid2">
         <div class="card"><b>RPO — the canary test</b><p>A ConfigMap created <em>after</em> the snapshot vanished on restore. Data since the last backup = lost. Backup frequency is a business decision.</p></div>
         <div class="card"><b>Defense in depth</b><p>Odd-quorum etcd (3/5) survives node loss — but replication spreads corruption instantly. So: quorum <strong>+</strong> frequent verified snapshots <strong>+</strong> a tested restore runbook.</p></div>
@@ -64,6 +79,17 @@ kubeadm upgrade plan ; kubeadm upgrade apply v1.31.x   <span class="c"># control
 
       <div class="pagehead"><h2 style="margin:0;border:none">4.4 · Capstone — multi-fault incident</h2><span class="chip ok">Done</span></div>
       <p>Two independent faults injected at once, diagnosed cold: a <strong>Deployment stuck Pending</strong> (100Gi request → <code class="inl">FailedScheduling</code>, a wedged rollout) and a <strong>silent DNS outage</strong> (CoreDNS scaled to 0). Triage → separate the problems → root-cause each → fix → verify the <em>real</em> symptom.</p>
+      <pre><span class="c"># inject (blind): an unschedulable Deployment + CoreDNS to zero</span>
+kubectl create deployment shop --image=nginx:1.27 --replicas=2
+kubectl set resources deployment shop --requests=memory=100Gi,cpu=32
+kubectl -n kube-system scale deployment coredns --replicas=0
+<span class="c"># triage → diagnose:</span>
+kubectl get pods -A                               <span class="c"># shop-* Pending; coredns MISSING</span>
+kubectl describe pod &lt;shop-pending-pod&gt; | tail    <span class="c"># FailedScheduling: Insufficient cpu/memory</span>
+kubectl exec sts-0 -- nslookup kubernetes.default.svc.cluster.local   <span class="c"># DNS down</span>
+<span class="c"># fix both, then verify the real symptoms:</span>
+kubectl set resources deployment shop --requests=memory=64Mi,cpu=100m
+kubectl -n kube-system scale deployment coredns --replicas=2</pre>
       <div class="card"><b>What closed it</b><p>Triage separated the two problems; “what’s <em>missing</em>” caught the silent CoreDNS fault; the <code class="inl">FailedScheduling</code> event handed over the scheduling cause; response-vs-hang and verify-the-symptom confirmed both fixes. Scripts: <code class="inl">labs/4.4-capstone-break.sh</code> / <code class="inl">-reset.sh</code>.</p></div>
 
       <div class="card"><b>Optional side-quest</b><p>Install <strong>Calico</strong> policy enforcement so the Day-2 <code class="inl">deny-web</code> NetworkPolicy actually bites — watch the same <code class="inl">wget</code> that succeeded under Flannel start timing out.</p></div>

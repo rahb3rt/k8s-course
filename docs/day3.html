@@ -58,7 +58,9 @@ time kubectl delete pod stubborn               <span class="c"># ~30s — waited
       <pre>kubectl apply -f manifests/qos-pods.yaml
 kubectl exec qos-guaranteed -- cat /proc/1/oom_score_adj   <span class="c"># -997</span>
 kubectl apply -f manifests/oom-victim.yaml                 <span class="c"># asks 300Mi under a 128Mi limit</span>
-kubectl get pod oom-victim -w                              <span class="c"># OOMKilled, exit 137 (=128+9)</span></pre>
+kubectl get pod oom-victim -w                              <span class="c"># OOMKilled, exit 137 (=128+9)</span>
+kubectl describe pod oom-victim | grep -A3 'Reason\|Exit Code'          <span class="c"># Reason: OOMKilled</span>
+limactl shell worker -- 'sudo dmesg | grep -i "killed process" | tail'  <span class="c"># the kernel's own record</span></pre>
       <div class="grid2">
         <div class="card crit"><b>Per-container OOM</b><p>Exceeded your own <code class="inl">limits.memory</code> → deterministic cgroup kill, QoS-irrelevant. Raise the limit or fix the leak.</p></div>
         <div class="card crit"><b>Node-level OOM</b><p>Node is full → kubelet <em>evicts</em> by QoS (BestEffort first) before the kernel kills by <code class="inl">oom_score_adj</code>.</p></div>
@@ -68,10 +70,14 @@ kubectl get pod oom-victim -w                              <span class="c"># OOM
       <p>Chain: <code class="inl">Pod → PVC (claim) → PV (volume) → StorageClass → provisioner</code>. Same pattern as NetworkPolicy — a claim is inert until a provisioner exists.</p>
       <pre>kubectl apply -f manifests/pvc-data.yaml
 kubectl get pvc data          <span class="c"># Pending — no provisioner yet</span>
-<span class="c"># install local-path (see manifests/local-path-provisioner.md), then:</span>
+<span class="c"># install the provisioner (the "actor" the claim waits for):</span>
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+kubectl get storageclass                     <span class="c"># local-path (WaitForFirstConsumer)</span>
 kubectl apply -f manifests/writer-pod.yaml   <span class="c"># a consumer → triggers WaitForFirstConsumer binding</span>
+kubectl get pvc data ; kubectl get pv        <span class="c"># now Bound; a PV was dynamically created</span>
 kubectl delete pod writer
-kubectl apply -f manifests/reader-pod.yaml   <span class="c"># NEW pod reads the note → data survived</span></pre>
+kubectl apply -f manifests/reader-pod.yaml   <span class="c"># NEW pod reads the note → data survived</span>
+kubectl logs reader                          <span class="c"># the note the deleted writer wrote</span></pre>
       <div class="card"><b>Reclaim-policy footgun</b><p><code class="inl">kubectl get pv</code> shows <code class="inl">Delete</code> (default for dynamic volumes) → deleting the PVC destroys the data. For databases, use <code class="inl">Retain</code>.</p></div>
 
       <h2>4 · StatefulSets — stable identity</h2>
