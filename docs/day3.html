@@ -87,6 +87,17 @@ kubectl get pods -l app=sts -w   <span class="c"># sts-0 Ready BEFORE sts-1 (ord
 kubectl delete pod sts-0
 kubectl logs sts-0               <span class="c"># boot.log has TWO lines — same name, same volume</span></pre>
 
+      <h2>Gotchas</h2>
+      <ul>
+        <li>A bare <code class="inl">sleep</code> as PID 1 also hangs ~30s on delete — the kernel suppresses SIGTERM's default action for PID 1, so no handler = ignored. Same wedged <code class="inl">Terminating</code> as an app that traps SIGTERM.</li>
+        <li><b>Fast-exiting</b> apps can drop traffic mid-rollout: endpoint removal races shutdown. Add a <code class="inl">preStop</code> sleep (~5–10s).</li>
+        <li><code class="inl">exit 137 = 128 + 9</code> (SIGKILL). A per-container <b>OOMKilled</b> is a cgroup-limit kill — deterministic, QoS-irrelevant, happens even with free node memory. Node-level OOM is the QoS-ordered one.</li>
+        <li>Workloads with no requests are <b>BestEffort</b> → first evicted/killed under pressure. Your <code class="inl">web</code>/<code class="inl">netlab</code> pods are BestEffort. Set requests.</li>
+        <li>PVC stuck <code class="inl">Pending</code>: no provisioner, an empty <code class="inl">storageClassName</code>, or <code class="inl">WaitForFirstConsumer</code> waiting for a consuming pod. <code class="inl">describe pvc</code> tells you which.</li>
+        <li>Reclaim policy <code class="inl">Delete</code> (default for dynamic PVs) <b>destroys the data</b> when you delete the PVC. Use <code class="inl">Retain</code> for anything you care about. Deleting a StatefulSet does <em>not</em> delete its PVCs — they linger.</li>
+        <li><code class="inl">local-path</code> is node-local: its pods can't reschedule to another node with their data. Network-attached storage can.</li>
+      </ul>
+
       <h2>Takeaways</h2>
       <div class="grid2">
         <div class="card"><b>Termination is a deadline</b><p>SIGTERM → grace → SIGKILL. Watch the endpoint-removal race.</p></div>

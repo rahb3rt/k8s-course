@@ -94,6 +94,15 @@ kubectl -n kube-system scale deployment coredns --replicas=2</pre>
 
       <div class="card"><b>Optional side-quest</b><p>Install <strong>Calico</strong> policy enforcement so the Day-2 <code class="inl">deny-web</code> NetworkPolicy actually bites — watch the same <code class="inl">wget</code> that succeeded under Flannel start timing out.</p></div>
 
+      <h2>Gotchas</h2>
+      <ul>
+        <li><b>etcd restore</b>: <code class="inl">--name</code>/<code class="inl">--initial-cluster</code>/<code class="inl">--initial-advertise-peer-urls</code> must match the running etcd, or the member won't rejoin (cluster-ID mismatch). And <code class="inl">etcdutl</code> refuses to restore over an existing data dir — <code class="inl">rm -rf /var/lib/etcd</code> first.</li>
+        <li><b>Cert rotation</b> is a no-op until you <b>restart the static pods</b> (files new, process old) and copy <code class="inl">admin.conf</code> back into <code class="inl">~/.kube/config</code>. On a young cluster the expiry <em>year</em> won't change — only the timestamp does.</li>
+        <li>A <b>drain that stalls</b> = a PodDisruptionBudget you can't satisfy → <code class="inl">kubectl get pdb -A</code> and check capacity. Draining also <b>permanently deletes bare pods</b> (no controller to recreate them); Deployment/StatefulSet pods come back.</li>
+        <li><code class="inl">kubeadm upgrade apply</code> needs the <b>exact</b> version (<code class="inl">v1.32.13</code>), not a placeholder like <code class="inl">v1.32.X</code>.</li>
+        <li>The apiserver crash-loops briefly after any control-plane bounce (etcd restart, cert rotation, upgrade) — retry <code class="inl">kubectl</code>, it's expected.</li>
+      </ul>
+
       <div class="prevnext">
         <a href="day3.html"><span class="lbl">← Prev</span> Day 3 · Storage &amp; Lifecycle</a>
         <a href="day5.html"><span class="lbl">Next →</span> Day 5 · Observability</a>

@@ -73,6 +73,16 @@ kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}</pre>
 kubectl apply -f manifests/oom-live-alert.prometheusrule.yaml
 ALERTS{alertname="OomLiveCrashLooping"}   <span class="c"># in Grafana Explore: pending -> firing -> Alertmanager</span></pre>
 
+      <h2>Gotchas</h2>
+      <ul>
+        <li>The stack is memory-hungry. On a small worker, cap Prometheus (<code class="inl">--set prometheus.prometheusSpec.resources.requests.memory=300Mi</code>) or pods land <code class="inl">Pending</code>/<code class="inl">OOMKilled</code> (a Day-3 callback).</li>
+        <li><code class="inl">PrometheusRule</code> and <code class="inl">ServiceMonitor</code> need the <code class="inl">release: monitoring</code> label — the operator's selector ignores anything without it, silently.</li>
+        <li>Prometheus here uses <b>emptyDir</b> — all metrics vanish on pod restart/reschedule. Give it a <b>PVC</b> in production.</li>
+        <li>Observability is <b>not retroactive</b>: no data exists for anything before Prometheus started scraping.</li>
+        <li><code class="inl">port-forward</code> binds the VM's <code class="inl">localhost</code>; Lima forwards it to your Mac's <code class="inl">localhost:3000</code>. Grafana login: user <code class="inl">admin</code>, password from the <code class="inl">monitoring-grafana</code> secret.</li>
+        <li>Alerts have a <code class="inl">for:</code> delay — the condition must hold that long before the alert flips <code class="inl">pending → firing</code>.</li>
+      </ul>
+
       <h2>Takeaways</h2>
       <div class="grid2">
         <div class="card"><b>Pull-based pipeline</b><p>Prometheus scrapes <code class="inl">/metrics</code>; exporters expose them; Grafana draws; Alertmanager routes.</p></div>
