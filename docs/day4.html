@@ -29,12 +29,19 @@
       <h1>Production Operations</h1>
       <p class="lede">The drills that separate people who <em>run</em> clusters from people who deploy to them. This page fills in with commands as we do each lab.</p>
 
-      <h2>4.1 · etcd backup &amp; restore</h2>
-      <p>The dark twin of Day 1’s breakage. There you stopped etcd’s <em>process</em> and lost nothing. Here you <strong>destroy its data</strong> and resurrect the whole cluster from a snapshot.</p>
-      <pre>etcdctl snapshot save /backup/snap.db          <span class="c"># point-in-time backup</span>
-<span class="c"># disaster: wipe /var/lib/etcd</span>
-etcdctl snapshot restore /backup/snap.db ...   <span class="c"># new data dir → repoint etcd → cluster returns</span></pre>
-      <p>Lesson: single-node etcd is a SPOF; production runs 3/5 members.</p>
+      <div class="pagehead"><h2 style="margin:0;border:none">4.1 · etcd backup &amp; restore</h2><span class="chip ok">Done</span></div>
+      <p>The dark twin of Day 1’s breakage. There you stopped etcd’s <em>process</em> and lost nothing. Here you <strong>destroyed its data</strong> (<code class="inl">rm -rf /var/lib/etcd</code>) and rebuilt the whole cluster from a snapshot — measured <strong>RTO ≈ 2 min</strong>.</p>
+      <pre>etcdctl snapshot save backup.db                <span class="c"># verified with: etcdutl snapshot status</span>
+sudo etcdutl snapshot restore backup.db \      <span class="c"># flags MUST match the running etcd:</span>
+  --name=lima-cp \
+  --initial-cluster=lima-cp=https://192.168.104.1:2380 \
+  --initial-advertise-peer-urls=https://192.168.104.1:2380 \
+  --data-dir=/var/lib/etcd</pre>
+      <div class="grid2">
+        <div class="card"><b>RPO — the canary test</b><p>A ConfigMap created <em>after</em> the snapshot vanished on restore. Data since the last backup = lost. Backup frequency is a business decision.</p></div>
+        <div class="card"><b>Defense in depth</b><p>Odd-quorum etcd (3/5) survives node loss — but replication spreads corruption instantly. So: quorum <strong>+</strong> frequent verified snapshots <strong>+</strong> a tested restore runbook.</p></div>
+      </div>
+      <p>Full runbook: <code class="inl">day4-production-ops/labs/4.1-etcd-backup-restore.md</code> · cron-able backup: <code class="inl">etcd-backup.sh</code></p>
 
       <h2>4.2 · Certificate expiry &amp; rotation</h2>
       <p>Deliberately expire an API server cert (from the PKI tree toured on Day 1), watch the cluster lock <em>itself</em> out, then rotate.</p>
