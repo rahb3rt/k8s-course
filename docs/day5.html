@@ -19,15 +19,15 @@
       <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
       <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
       <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st done"></span></a>
-      <a class="item active" href="day5.html"><span class="n">D5</span> Observability <span class="st next"></span></a>
-      <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st todo"></span></a>
+      <a class="item active" href="day5.html"><span class="n">D5</span> Observability <span class="st done"></span></a>
+      <a class="item" href="day6.html"><span class="n">D6</span> Cluster Upgrade <span class="st next"></span></a>
       <div class="navgroup">Phase 2 · Architect</div>
       <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
     </div>
   </nav>
   <main>
     <div class="content">
-      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 05</p><span class="chip next">In progress</span></div>
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 05</p><span class="chip ok">Complete</span></div>
       <h1>Observability: Prometheus &amp; Grafana</h1>
       <p class="lede">Stop guessing what the cluster is doing. Deploy the <strong>kube-prometheus-stack</strong> (Prometheus + Grafana + Alertmanager + exporters) with Helm, and learn the pull-based metrics pipeline from scrape to dashboard.</p>
 
@@ -45,14 +45,37 @@
         </tbody>
       </table></div>
 
-      <h2>Segments (filled in as we go)</h2>
+      <h2>5.1 · Install with Helm</h2>
+      <pre>curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --set prometheus.prometheusSpec.retention=3h</pre>
+      <p>One chart deployed Prometheus + Grafana + Alertmanager + the operator + both exporters. <code class="inl">node-exporter</code> is a DaemonSet (one per node); <code class="inl">kube-state-metrics</code> is a single Deployment. The <code class="inl">2/2</code> / <code class="inl">3/3</code> READY counts are operator-injected config-reloader &amp; dashboard sidecars.</p>
+
+      <h2>5.2 · Reach Grafana</h2>
+      <pre>kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80   <span class="c"># open localhost:3000 (Lima forwards it)</span></pre>
+      <p>Pre-built <code class="inl">Kubernetes / …</code> and <code class="inl">Node Exporter / Nodes</code> dashboards, already populated. Log in as <code class="inl">admin</code>.</p>
+
+      <h2>5.3 · Query with PromQL</h2>
+      <pre>sort_desc(kube_pod_container_status_restarts_total)     <span class="c"># apiserver's restart scars from Days 1 &amp; 4</span>
+kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}</pre>
+      <div class="card crit"><b>Observability is not retroactive</b><p>Prometheus only knows what it scraped since it started. Day-3 events that predate it are gone. Deploy monitoring <em>before</em> the incident — a metric you weren't collecting is a question you can never answer.</p></div>
+
+      <h2>5.4 · ServiceMonitors, PrometheusRules &amp; a firing alert</h2>
+      <p>Prometheus discovers targets via <code class="inl">ServiceMonitor</code> CRDs; alerts are <code class="inl">PrometheusRule</code> CRDs. The <strong>Prometheus Operator</strong> — a controller — watches both and reconciles them into running config. <strong>That's the exact pattern you build in Phase 2 A1.</strong> We wrote a rule that fired on a self-inflicted OOM crash-loop.</p>
+      <pre>kubectl get servicemonitor -A       <span class="c"># ~a dozen — one per component</span>
+kubectl apply -f manifests/oom-live-alert.prometheusrule.yaml
+ALERTS{alertname="OomLiveCrashLooping"}   <span class="c"># in Grafana Explore: pending -> firing -> Alertmanager</span></pre>
+
+      <h2>Takeaways</h2>
       <div class="grid2">
-        <div class="card"><b>5.1 · Install Helm + the stack</b><p>Helm as the package manager; install <code class="inl">kube-prometheus-stack</code> from the prometheus-community chart.</p></div>
-        <div class="card"><b>5.2 · Reach Grafana</b><p>Port-forward in, log in, tour the pre-built cluster dashboards.</p></div>
-        <div class="card"><b>5.3 · Read your own history</b><p>PromQL for the pod restarts, OOMKills, and QoS you caused on Day 3 — see them as time series.</p></div>
-        <div class="card"><b>5.4 · Scrape a workload + an alert</b><p>A ServiceMonitor to scrape an app, and an alert rule that fires on a condition you trigger.</p></div>
+        <div class="card"><b>Pull-based pipeline</b><p>Prometheus scrapes <code class="inl">/metrics</code>; exporters expose them; Grafana draws; Alertmanager routes.</p></div>
+        <div class="card"><b>Operators reconcile CRDs</b><p>ServiceMonitor/PrometheusRule are intent; the operator makes them real — a live preview of Phase 2.</p></div>
+        <div class="card crit"><b>Monitor before the incident</b><p>There is no historical data for what you weren't scraping.</p></div>
+        <div class="card"><b>Helm = platform delivery</b><p>Six components, one chart, dozens of objects — how real platforms ship.</p></div>
       </div>
-      <p style="color:var(--ink-3)">This page fills in with commands and findings as we complete each segment.</p>
 
       <div class="prevnext">
         <a href="day4.html"><span class="lbl">← Prev</span> Day 4 · Production Ops</a>

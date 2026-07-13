@@ -1,0 +1,19 @@
+# A pod that OOMs on a loop (restartPolicy: Always -> CrashLoopBackOff), so its restart
+# counter climbs live in Prometheus/Grafana. Used to demonstrate observing a self-inflicted
+# failure and to trigger the OomLiveCrashLooping alert.
+#   kubectl apply -f oom-live.yaml
+#   # in Grafana Explore:  kube_pod_container_status_restarts_total{pod="oom-live"}
+#   kubectl delete pod oom-live   # cleanup (it wastes CPU crash-looping)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-live
+  labels: {app: oom-live}
+spec:
+  containers:
+    - name: c
+      image: python:3-alpine
+      command: ["python3", "-c", "a=bytearray(300*1024*1024)"]
+      resources:
+        limits:
+          memory: 128Mi
