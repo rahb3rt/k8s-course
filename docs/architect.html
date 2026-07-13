@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 2 — The Architect Track</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item active" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 2</p><span class="chip todo">Planned</span></div>
+      <h1>The Architect Track</h1>
+      <p class="lede">From <em>using</em> the Kubernetes API to <em>extending</em> it, and from running one cluster to designing a fleet. Full-spectrum coverage — platform, product, and infra architecture. Operator builds in <strong>Go + kubebuilder</strong>.</p>
+
+      <div class="card"><b>The bridge</b><p>Phase 1’s through-line was <em>“the API stores intent; something must enforce it”</em> — NetworkPolicy needs a policy CNI, a PVC needs a provisioner, a Deployment needs the controller-manager. That “something” is a <strong>controller</strong>. An operator observes controllers; <strong>an architect writes them.</strong> Every module closes with a <strong>decision framework</strong> — architecture is judgment, not trivia.</p></div>
+
+      <h2 id="a1">A1 · The Controller Pattern</h2>
+      <p>The heart of Kubernetes and the operator→architect moment. Control theory: <strong>desired vs observed state</strong>, <strong>level-triggered</strong> (reconcile to truth) not edge-triggered (react to events), idempotent reconcile loops, the informer/work-queue machinery.</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>First a ~20-line <strong>shell reconciler</strong> to feel the loop with zero framework, then a real <strong>CRD + controller with kubebuilder</strong> (controller-runtime) that reconciles a custom resource to reality — the same pattern kube-controller-manager uses.</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>When to reach for a controller/operator vs a Helm chart vs a Job. What belongs in an API vs config.</p>
+
+      <h2 id="a2">A2 · Extending the API</h2>
+      <p>CRDs with schema validation &amp; versioning, <strong>admission webhooks</strong> (mutating + validating), finalizers, owner references &amp; garbage collection, the status subresource, and API aggregation. Policy-as-code with <strong>Kyverno / OPA Gatekeeper</strong>.</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>A validating admission webhook + a policy that rejects non-compliant manifests (e.g. “no BestEffort in prod,” “images must be signed”).</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>CRD vs ConfigMap vs annotation; webhook vs policy engine; how to version an API you’ll have to live with.</p>
+
+      <h2 id="a3">A3 · Scaling &amp; Scheduling Architecture</h2>
+      <p><strong>HPA / VPA / Cluster Autoscaler / Karpenter</strong>, requests-and-limits strategy, affinity &amp; anti-affinity, topology spread, taints/tolerations, priority &amp; preemption, PodDisruptionBudgets, and capacity &amp; cost modeling.</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>An autoscaling + scheduling design validated under a load test — watch pods scale and land where you designed.</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>HPA vs VPA vs both; node autoscaling (CA vs Karpenter); how to size requests without over-provisioning cost.</p>
+
+      <h2 id="a4">A4 · Platform Architecture</h2>
+      <p>The big trade-off module. <strong>CNI selection</strong> (Flannel vs Calico vs Cilium/eBPF), <strong>Ingress vs Gateway API</strong>, <strong>service mesh</strong> (when it earns its complexity), and <strong>multi-tenancy</strong>: namespaces → vClusters → separate clusters, with the isolation/cost trade-off at each tier.</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>A tenancy + network design with every choice defended in writing.</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>Soft vs hard multi-tenancy; when a mesh is worth it; ingress controller selection.</p>
+
+      <h2 id="a5">A5 · Delivery &amp; Fleet</h2>
+      <p><strong>GitOps</strong> (Argo CD / Flux), <strong>Helm vs Kustomize</strong>, progressive delivery (canary/blue-green), environment promotion, and multi-cluster fleet management.</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>A GitOps pipeline that reconciles the lab cluster from a repo — closing the loop: your <em>cluster state</em> becomes a controller reconciling <em>Git</em>.</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>Argo vs Flux; Helm vs Kustomize vs both; push vs pull delivery; how to promote across environments safely.</p>
+
+      <h2 id="a6">A6 · Reliability &amp; Security Architecture</h2>
+      <p><strong>DR &amp; backup</strong> (Velero, etcd strategy, multi-region), <strong>RBAC &amp; Pod Security Admission</strong>, <strong>supply chain</strong> (image signing, SBOMs, admission gates), <strong>secrets</strong> (External Secrets / KMS), and observability architecture (metrics/logs/traces, SLOs).</p>
+      <h4 class="sub">You’ll build</h4>
+      <p>A security posture + DR runbook for the cluster: least-privilege RBAC, enforced PSA, backup/restore drill.</p>
+      <h4 class="sub">Decision framework</h4>
+      <p>RTO/RPO → backup strategy; where secrets live; how much supply-chain rigor a given org actually needs.</p>
+
+      <h2 id="a7">A7 · Capstone — Reference-Architecture Review</h2>
+      <p>Given a realistic set of requirements (scale, compliance, budget, team shape), produce a <strong>full reference architecture</strong> — clusters, networking, tenancy, delivery, security, DR — and <strong>defend the trade-offs</strong> against my adversarial review. This is the architect’s real job: not knowing every knob, but justifying every choice.</p>
+
+      <div class="prevnext">
+        <a href="day4.html"><span class="lbl">← Prev</span> Day 4 · Production Ops</a>
+        <a href="index.html"><span class="lbl">Home →</span> Course overview</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

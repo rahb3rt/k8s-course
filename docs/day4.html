@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 4 — Production Operations</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <a class="brand" href="index.html"><div class="logo">⎈ K8s Field Manual</div><div class="sub">SRE → Architect</div></a>
+    <div class="links">
+      <div class="navgroup">Course</div>
+      <a class="item" href="index.html"><span class="n">◇</span> Home</a>
+      <a class="item" href="setup.html"><span class="n">§</span> Setup</a>
+      <div class="navgroup">Phase 1 · Foundations</div>
+      <a class="item" href="day1.html"><span class="n">D1</span> Substrate &amp; Control Plane <span class="st done"></span></a>
+      <a class="item" href="day2.html"><span class="n">D2</span> Networking <span class="st done"></span></a>
+      <a class="item" href="day3.html"><span class="n">D3</span> Storage &amp; Lifecycle <span class="st done"></span></a>
+      <a class="item active" href="day4.html"><span class="n">D4</span> Production Ops <span class="st next"></span></a>
+      <div class="navgroup">Phase 2 · Architect</div>
+      <a class="item" href="architect.html"><span class="n">A</span> Architect Track <span class="st todo"></span></a>
+    </div>
+  </nav>
+  <main>
+    <div class="content">
+      <div class="pagehead"><p class="eyebrow" style="margin:0">Phase 1 · Day 04</p><span class="chip next">Up next</span></div>
+      <h1>Production Operations</h1>
+      <p class="lede">The drills that separate people who <em>run</em> clusters from people who deploy to them. This page fills in with commands as we do each lab.</p>
+
+      <h2>4.1 · etcd backup &amp; restore</h2>
+      <p>The dark twin of Day 1’s breakage. There you stopped etcd’s <em>process</em> and lost nothing. Here you <strong>destroy its data</strong> and resurrect the whole cluster from a snapshot.</p>
+      <pre>etcdctl snapshot save /backup/snap.db          <span class="c"># point-in-time backup</span>
+<span class="c"># disaster: wipe /var/lib/etcd</span>
+etcdctl snapshot restore /backup/snap.db ...   <span class="c"># new data dir → repoint etcd → cluster returns</span></pre>
+      <p>Lesson: single-node etcd is a SPOF; production runs 3/5 members.</p>
+
+      <h2>4.2 · Certificate expiry &amp; rotation</h2>
+      <p>Deliberately expire an API server cert (from the PKI tree toured on Day 1), watch the cluster lock <em>itself</em> out, then rotate.</p>
+      <pre>kubeadm certs check-expiration
+kubeadm certs renew all        <span class="c"># then restart control-plane static pods + refresh kubeconfigs</span></pre>
+
+      <h2>4.3 · Upgrades, drain, cordon &amp; PDBs</h2>
+      <p>Move workloads off a node safely and roll a version bump — and see how a PodDisruptionBudget can <em>block</em> a drain.</p>
+      <pre>kubectl cordon &lt;node&gt; ; kubectl drain &lt;node&gt; --ignore-daemonsets
+kubeadm upgrade plan ; kubeadm upgrade apply v1.31.x</pre>
+
+      <h2>4.4 · Capstone — multi-fault incident</h2>
+      <p>Several failures at once, you drive the diagnosis (scaffolded), using the method and the whole toolkit from Days 1–3.</p>
+
+      <div class="card"><b>Optional side-quest</b><p>Install <strong>Calico</strong> policy enforcement so the Day-2 <code class="inl">deny-web</code> NetworkPolicy actually bites — watch the same <code class="inl">wget</code> that succeeded under Flannel start timing out.</p></div>
+
+      <div class="prevnext">
+        <a href="day3.html"><span class="lbl">← Prev</span> Day 3 · Storage &amp; Lifecycle</a>
+        <a href="architect.html"><span class="lbl">Next →</span> Phase 2 · The Architect Track</a>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
