@@ -1,0 +1,54 @@
+# Headless Service + StatefulSet. Demonstrates the three things a Deployment can't give:
+#   1. Stable identity  — pods are sts-0, sts-1 (ordinal), and stay that way across restarts
+#   2. Private storage  — each pod gets its own PVC via volumeClaimTemplates (data-sts-0/1)
+#   3. Ordered lifecycle — sts-0 goes Ready before sts-1 starts; scale-down is reverse order
+# Plus per-pod DNS via the headless (clusterIP: None) Service: sts-0.sts.default.svc.cluster.local
+#
+#   kubectl apply -f statefulset-sts.yaml
+#   kubectl get pods -l app=sts -w        # watch ordered startup
+#   kubectl get pvc                        # data-sts-0, data-sts-1
+#   kubectl delete pod sts-0 && kubectl wait --for=condition=Ready pod/sts-0
+#   kubectl logs sts-0                     # boot.log has BOTH lines — same volume reattached
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sts
+spec:
+  clusterIP: None            # headless — mints per-pod DNS names
+  selector:
+    app: sts
+  ports:
+    - port: 80
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sts
+spec:
+  serviceName: sts
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sts
+  template:
+    metadata:
+      labels:
+        app: sts
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: c
+          image: busybox:1.36
+          command: ["sh", "-c", "echo \"$(date +%T) booted as $(hostname)\" >> /data/boot.log; cat /data/boot.log; sleep 3600"]
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 100Mi

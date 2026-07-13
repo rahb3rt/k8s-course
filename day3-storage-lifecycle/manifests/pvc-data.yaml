@@ -1,0 +1,15 @@
+# A 1Gi claim. With no provisioner installed it stays Pending forever (a claim with no
+# factory). Once local-path is installed it binds — but only when a consumer pod schedules
+# (WaitForFirstConsumer). storageClassName is set explicitly to avoid empty-class limbo.
+#   kubectl apply -f pvc-data.yaml
+#   kubectl get pvc data ; kubectl describe pvc data | tail
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

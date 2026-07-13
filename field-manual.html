@@ -1,0 +1,687 @@
+<title>Kubernetes from the Ground Up — SRE Field Manual</title>
+<style>
+  :root {
+    --paper: #EDF0F6;
+    --ground: #F6F8FB;
+    --surface: #FFFFFF;
+    --ink: #131A26;
+    --ink-2: #47515F;
+    --ink-3: #7B8593;
+    --line: #D8DEE8;
+    --line-soft: #E6EAF1;
+    --accent: #2E56E6;
+    --accent-deep: #1C36A6;
+    --ok: #1C8B57;
+    --ok-bg: #E4F3EB;
+    --warn: #B0751A;
+    --warn-bg: #F6EEDD;
+    --crit: #BF3A2C;
+    --crit-bg: #F7E5E2;
+    --code-bg: #0D1524;
+    --code-panel: #131D30;
+    --code-ink: #D4DCEC;
+    --code-dim: #6D7C93;
+    --code-blue: #83B0FF;
+    --code-green: #7FD69F;
+    --code-amber: #E7C173;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  .prose { max-width: 68ch; }
+
+  /* ---- Masthead ---- */
+  header.mast {
+    padding: 72px 0 40px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.05rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 1.12rem;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin: 0;
+  }
+  .mast-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-top: 30px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .mast-meta b { color: var(--ink); font-weight: 600; }
+
+  /* ---- Progress strip ---- */
+  .progress {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 40px 0 12px;
+  }
+  .pnode {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--line);
+    border-radius: 3px;
+    padding: 16px 16px 18px;
+    position: relative;
+  }
+  .pnode .pn-day {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pnode .pn-title {
+    font-weight: 700;
+    font-size: 0.98rem;
+    margin-top: 4px;
+    line-height: 1.25;
+  }
+  .pnode .pn-state {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pnode.done { border-top-color: var(--ok); }
+  .pnode.done .pn-state { color: var(--ok); }
+  .pnode.next { border-top-color: var(--accent); box-shadow: 0 2px 0 0 var(--accent) inset, 0 8px 24px -14px rgba(46,86,230,.5); }
+  .pnode.next .pn-state { color: var(--accent); }
+  .pnode.todo .pn-state { color: var(--ink-3); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+  .ring { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; display: inline-block; }
+
+  /* ---- Lab env card ---- */
+  .env {
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 22px 24px;
+    margin: 28px 0 8px;
+    color: var(--code-ink);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    overflow-x: auto;
+  }
+  .env .env-h {
+    color: var(--code-dim);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    margin-bottom: 14px;
+  }
+  .env table { border-collapse: collapse; width: 100%; min-width: 480px; }
+  .env td { padding: 3px 18px 3px 0; vertical-align: top; white-space: nowrap; }
+  .env td:first-child { color: var(--code-blue); }
+  .env td.v { color: var(--code-ink); }
+  .env .cmt { color: var(--code-green); }
+
+  /* ---- Section / day blocks ---- */
+  section.day { margin-top: 56px; scroll-margin-top: 20px; }
+  .day-head {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .day-idx {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--accent-deep);
+    letter-spacing: 0.02em;
+  }
+  .day-head h2 {
+    font-size: 1.6rem;
+    letter-spacing: -0.015em;
+    margin: 0;
+    flex: 1;
+    font-weight: 750;
+    text-wrap: balance;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 100px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); border-color: #C0E4CE; }
+  .chip.next { background: #E4EAFD; color: var(--accent-deep); border-color: #C4D1FA; }
+  .chip.todo { background: #EDF0F6; color: var(--ink-3); border-color: var(--line); }
+
+  .day > p { color: var(--ink-2); max-width: 68ch; }
+  h3.sub {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 34px 0 14px;
+    font-weight: 600;
+  }
+
+  /* ---- Lab list ---- */
+  .lab {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .lab:last-child { border-bottom: none; }
+  .lab .tag {
+    grid-row: span 2;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    padding-top: 2px;
+    white-space: nowrap;
+  }
+  .lab .lab-t { font-weight: 650; }
+  .lab .lab-d { color: var(--ink-2); font-size: 0.94rem; }
+  .lab.break .tag { color: var(--crit); }
+
+  /* ---- Takeaway cards ---- */
+  .takes { display: grid; gap: 12px; margin-top: 8px; }
+  .take {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 14px 18px;
+  }
+  .take b { font-weight: 700; }
+  .take p { margin: 4px 0 0; color: var(--ink-2); font-size: 0.95rem; }
+  .take.crit { border-left-color: var(--crit); }
+
+  /* ---- Code blocks ---- */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    padding: 18px 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 18px 0;
+  }
+  pre .c { color: var(--code-dim); }
+  pre .g { color: var(--code-green); }
+  pre .b { color: var(--code-blue); }
+  pre .a { color: var(--code-amber); }
+  code.inl {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: #E3E8F1;
+    color: var(--accent-deep);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* ---- Toolkit box ---- */
+  .toolkit {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 26px 26px;
+    margin-top: 20px;
+  }
+  .tk-row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 20px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .tk-row:last-child { border-bottom: none; }
+  .tk-row .k { font-family: var(--mono); font-size: 0.82rem; color: var(--accent-deep); }
+  .tk-row .d { color: var(--ink-2); font-size: 0.95rem; }
+  .tk-row .d b { color: var(--ink); }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 22px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    color: var(--ink-3);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 620px) {
+    .progress { grid-template-columns: repeat(2, 1fr); }
+    .tk-row { grid-template-columns: 1fr; gap: 4px; }
+    .lab { grid-template-columns: 1fr; }
+    .lab .tag { grid-row: auto; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">SRE Track · Field Manual</p>
+    <h1>Kubernetes from the Ground Up</h1>
+    <p class="lede">A four-day internals curriculum built on a real <b>kubeadm</b> cluster — where every component gets dissected, deliberately broken, and debugged cold. No black boxes.</p>
+    <div class="mast-meta">
+      <span>Host <b>Apple Silicon · Lima/vz</b></span>
+      <span>Kubernetes <b>v1.31</b></span>
+      <span>Runtime <b>containerd</b></span>
+      <span>CNI <b>Flannel</b></span>
+    </div>
+  </header>
+
+  <div class="progress">
+    <div class="pnode done">
+      <div class="pn-day">Day 01</div>
+      <div class="pn-title">Substrate &amp; Control Plane</div>
+      <div class="pn-state"><span class="dot"></span>Complete</div>
+    </div>
+    <div class="pnode done">
+      <div class="pn-day">Day 02</div>
+      <div class="pn-title">Networking &amp; the Dataplane</div>
+      <div class="pn-state"><span class="dot"></span>Complete</div>
+    </div>
+    <div class="pnode done">
+      <div class="pn-day">Day 03</div>
+      <div class="pn-title">Storage · Lifecycle · OOM</div>
+      <div class="pn-state"><span class="dot"></span>Complete</div>
+    </div>
+    <div class="pnode next">
+      <div class="pn-day">Day 04</div>
+      <div class="pn-title">Production Operations</div>
+      <div class="pn-state"><span class="ring"></span>Up next</div>
+    </div>
+  </div>
+
+  <div class="env">
+    <div class="env-h">Lab environment</div>
+    <table>
+      <tr><td>cp</td><td class="v">192.168.104.1</td><td class="cmt"># control-plane · tainted NoSchedule</td></tr>
+      <tr><td>worker</td><td class="v">192.168.104.3</td><td class="cmt"># runs the workloads</td></tr>
+      <tr><td>sandbox</td><td class="v">—</td><td class="cmt"># throwaway VM for namespace labs</td></tr>
+      <tr><td>pod CIDR</td><td class="v">10.244.0.0/16</td><td class="cmt"># disjoint from node net (no overlap)</td></tr>
+      <tr><td>node net</td><td class="v">192.168.104.0/24</td><td class="cmt"># Lima user-v2 shared L2</td></tr>
+    </table>
+  </div>
+
+  <!-- ============ DAY 1 ============ -->
+  <section class="day" id="day1">
+    <div class="day-head">
+      <span class="day-idx">D1</span>
+      <h2>Substrate &amp; the Control Plane</h2>
+      <span class="chip ok">Complete</span>
+    </div>
+    <p>Start below Kubernetes and climb up: a container built by hand from Linux primitives, then a control plane assembled from four files on disk, all the way down to the protobuf bytes in etcd — and finally, killing it to watch what "the cluster is down" really means.</p>
+
+    <h3 class="sub">Labs run</h3>
+    <div class="lab">
+      <span class="tag">1.1</span>
+      <div class="lab-t">A container, by hand</div>
+      <div class="lab-d"><code class="inl">unshare</code> a process into its own PID / net / uts / mnt namespaces — no Docker. Proved the isolation, then found the missing third leg: rootfs.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">1.2</span>
+      <div class="lab-t">kubeadm bootstrap &amp; dissection</div>
+      <div class="lab-d">Init the control plane, then read every static pod manifest, walk the PKI tree, and join the worker via the TLS bootstrap-token protocol.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">1.3</span>
+      <div class="lab-t">Read etcd raw</div>
+      <div class="lab-d">Query keys straight out of etcd with <code class="inl">etcdctl</code> and see objects stored as protobuf — proving the API server is etcd's sole interpreter.</div>
+    </div>
+    <div class="lab break">
+      <span class="tag">☂ 1.4</span>
+      <div class="lab-t">Breakage — kill etcd</div>
+      <div class="lab-d">Move <code class="inl">etcd.yaml</code> out of the manifests dir; watch the API server's <code class="inl">/readyz</code> hit 500 and crash-loop. Diagnose with kubectl dead; recover by restoring one file. Zero data lost.</div>
+    </div>
+
+    <h3 class="sub">Key commands</h3>
+    <pre><span class="c"># Build the kernel core of a container — one command, no daemon</span>
+sudo unshare --pid --fork --mount-proc --uts --net --ipc --mount bash
+
+<span class="c"># The control plane is four files the kubelet babysits</span>
+ls /etc/kubernetes/manifests/   <span class="c"># etcd · apiserver · controller-manager · scheduler</span>
+
+<span class="c"># Read cluster state straight from etcd (etcdctl lives in the distroless image)</span>
+kubectl -n kube-system exec -i etcd-lima-cp -- etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  get /registry --prefix --keys-only
+
+<span class="c"># When kubectl is dead, drop a layer (node-local!)</span>
+sudo crictl ps                      <span class="c"># containers on THIS node</span>
+sudo journalctl -u kubelet -f       <span class="c"># the kubelet's live view</span></pre>
+
+    <h3 class="sub">Mental models locked in</h3>
+    <div class="takes">
+      <div class="take">
+        <b>A container is three Linux primitives.</b>
+        <p>Namespaces (what it sees) + cgroups (what it can use) + a pivoted rootfs (its files). Every "weird pod" bug bottoms out in one of these.</p>
+      </div>
+      <div class="take">
+        <b>The control plane bootstraps from disk.</b>
+        <p>Static pods in <code class="inl">/etc/kubernetes/manifests/</code> run without a scheduler or API server. <code class="inl">hostNetwork: true</code> is why they start before any CNI exists — CoreDNS had to wait; etcd never did.</p>
+      </div>
+      <div class="take">
+        <b>etcd is truth; the API server is its only interpreter.</b>
+        <p>Objects are stored as protobuf. A 40-line manifest becomes kilobytes of status, QoS, digests, and managedFields. "Everything goes through the apiserver" is architecture, not etiquette.</p>
+      </div>
+      <div class="take crit">
+        <b>Control plane down ≠ workloads down.</b>
+        <p>etcd, apiserver, and kubectl were all dead — the nginx pods served traffic the whole time. Different sev levels. The kubelet runs pods from local state.</p>
+      </div>
+      <div class="take crit">
+        <b>Read the error's layer.</b>
+        <p><code class="inl">refused</code> = the process isn't listening; <code class="inl">timeout</code> = it's there but stuck on a dependency. Data outlives process: <code class="inl">/var/lib/etcd</code> survived, so recovery was lossless.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DAY 2 ============ -->
+  <section class="day" id="day2">
+    <div class="day-head">
+      <span class="day-idx">D2</span>
+      <h2>Networking &amp; the Dataplane</h2>
+      <span class="chip ok">Complete</span>
+    </div>
+    <p>How a <code class="inl">10.244.x.x</code> packet crosses a <code class="inl">192.168.104.0/24</code> link the VMs don't route pod IPs on — traced end to end with <code class="inl">tcpdump</code>, then broken and fixed by hand.</p>
+
+    <h3 class="sub">Labs run</h3>
+    <div class="lab">
+      <span class="tag">2.1</span>
+      <div class="lab-t">Map the dataplane</div>
+      <div class="lab-d">Found <code class="inl">cni0</code> (bridge), <code class="inl">flannel.1</code> (VXLAN), and a <code class="inl">veth</code> per pod. The routing table makes the same-node (<code class="inl">dev cni0</code>) vs cross-node (<code class="inl">dev flannel.1</code>) decision.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">2.2</span>
+      <div class="lab-t">Trace the packet, two layers</div>
+      <div class="lab-d">Caught one ICMP echo in two envelopes: inner pod→pod on <code class="inl">flannel.1</code>, outer node→node UDP/8472 on <code class="inl">eth0</code>. VXLAN encapsulation, live.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">2.3</span>
+      <div class="lab-t">A Service is just rules</div>
+      <div class="lab-d">Walked <code class="inl">KUBE-SERVICES → KUBE-SVC → KUBE-SEP</code>: a ClusterIP is a NAT match target, load-balanced by a <code class="inl">statistic random</code> probability chain, DNAT'd to a pod. No proxy in the path.</div>
+    </div>
+    <div class="lab break">
+      <span class="tag">☂ 2.4</span>
+      <div class="lab-t">Breakage — the vanishing replies <span style="color:var(--ok)">✓ solved solo</span></div>
+      <div class="lab-d">A DROP on inbound UDP/8472 killed cross-node traffic. Localized by hand to the netfilter <code class="inl">INPUT</code> chain — reply seen on <code class="inl">eth0</code>, gone before <code class="inl">flannel.1</code>. Found the rule; DNS restored.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">2.5</span>
+      <div class="lab-t">The firewall that isn't one</div>
+      <div class="lab-d">A default-deny <code class="inl">NetworkPolicy</code> did nothing — Flannel doesn't enforce policy. Intent stored in etcd with no enforcer to realize it.</div>
+    </div>
+
+    <h3 class="sub">The debugging method — turn the crank</h3>
+    <div class="take">
+      <b>Bisection for "X can't reach Y"</b>
+      <ol style="margin:8px 0 0;padding-left:20px;color:var(--ink-2);font-size:0.95rem;line-height:1.7;">
+        <li><b>Reproduce</b> — see the failure yourself before touching anything.</li>
+        <li><b>Narrow</b> — change one variable to halve it: all traffic or one port? cross-node or same-node? one pod or all?</li>
+        <li><b>Walk the path</b> — follow the packet hop by hop with <code class="inl">tcpdump</code>; find where it stops.</li>
+        <li><b>Inspect at the break</b> — routes, iptables, firewall — wherever step 3 pointed.</li>
+        <li><b>Fix &amp; verify the original symptom</b> — not a proxy metric; the thing the user reported.</li>
+      </ol>
+    </div>
+
+    <h3 class="sub">Key commands</h3>
+    <pre><span class="c"># The routing table IS the same-node vs cross-node decision</span>
+ip route          <span class="c"># 10.244.1.0/24 dev cni0  |  10.244.0.0/24 ... dev flannel.1</span>
+
+<span class="c"># See both envelopes of a cross-node hop</span>
+sudo tcpdump -ni eth0 udp port 8472     <span class="c"># outer: node -> node (VXLAN)</span>
+sudo tcpdump -ni flannel.1 icmp         <span class="c"># inner: pod  -> pod  (decapsulated)</span>
+
+<span class="c"># A Service is NAT rules kube-proxy writes</span>
+sudo iptables-save -t nat | grep &lt;clusterIP&gt;
+
+<span class="c"># tcpdump taps BEFORE netfilter: on eth0 but not flannel.1 = dropped in INPUT</span>
+sudo iptables -L INPUT -n -v --line-numbers</pre>
+
+    <h3 class="sub">Mental models locked in</h3>
+    <div class="takes">
+      <div class="take">
+        <b>Flat pod network, two implementations.</b>
+        <p>Every pod gets a real routable IP. Same-node hops cross the <code class="inl">cni0</code> bridge; cross-node hops get VXLAN-encapsulated (node IPs outside, pod packet inside). Overhead = 50 bytes → pod MTU 1450.</p>
+      </div>
+      <div class="take">
+        <b>A Service is a NAT illusion, not a process.</b>
+        <p>The ClusterIP exists only as an <code class="inl">iptables</code> match; DNAT rewrites it to a pod IP and conntrack pins the choice. Load balancing is a chain of probability rules. Off-network sources get masqueraded.</p>
+      </div>
+      <div class="take">
+        <b>Response ≠ hang — and short names are slow.</b>
+        <p>An <code class="inl">NXDOMAIN</code> means DNS <i>works</i>; a timeout means the path is dead. <code class="inl">ndots:5</code> + search domains make short names cost 4–5 lookups — prefer FQDNs.</p>
+      </div>
+      <div class="take crit">
+        <b>The API stores intent; something must enforce it.</b>
+        <p>A <code class="inl">NetworkPolicy</code> under Flannel is inert — accepted, stored, unenforced, <i>silently fails open</i>. "Security object exists" ≠ "security is enforced." Verify with a policy CNI (Calico/Cilium) and a live deny test.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DAY 3 ============ -->
+  <section class="day" id="day3">
+    <div class="day-head">
+      <span class="day-idx">D3</span>
+      <h2>Storage, Lifecycle &amp; the OOM Killer</h2>
+      <span class="chip ok">Complete</span>
+    </div>
+    <p>State and time: how pods are torn down, who the kernel kills under memory pressure, and how data outlives the pod that wrote it.</p>
+
+    <h3 class="sub">Labs run</h3>
+    <div class="lab">
+      <span class="tag">3.1</span>
+      <div class="lab-t">How a pod dies</div>
+      <div class="lab-d">A pod that ignored <code class="inl">SIGTERM</code> hung in <code class="inl">Terminating</code> for the full 30s grace period, then <code class="inl">SIGKILL</code>. The Day-1 PID-1 signal trap, made real.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">3.2</span>
+      <div class="lab-t">QoS → oom_score_adj</div>
+      <div class="lab-d">Read <code class="inl">-997 / ~992 / 1000</code> off Guaranteed / Burstable / BestEffort pods — the exact integers the kernel OOM killer reads to pick a victim.</div>
+    </div>
+    <div class="lab break">
+      <span class="tag">☂ 3.3</span>
+      <div class="lab-t">OOMKilled, live</div>
+      <div class="lab-d">A pod asked for 300Mi under a 128Mi limit → cgroup OOM → <code class="inl">exit 137</code> (SIGKILL), confirmed in the node's <code class="inl">dmesg</code>.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">3.4</span>
+      <div class="lab-t">Storage that survives</div>
+      <div class="lab-d">PVC <code class="inl">Pending</code> with no provisioner → installed local-path → <code class="inl">WaitForFirstConsumer</code> → bound on pod schedule. A file read back by a pod created after its writer was deleted.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">3.5</span>
+      <div class="lab-t">StatefulSets: stable identity</div>
+      <div class="lab-d">Ordinal names (<code class="inl">sts-0/1</code>), one private PVC per pod, ordered boot. Deleted <code class="inl">sts-0</code> came back as itself, reattached to its own volume, with stable per-pod DNS.</div>
+    </div>
+
+    <h3 class="sub">Key commands</h3>
+    <pre><span class="c"># The grace period lives on the pod; a SIGTERM-ignoring PID 1 waits it out</span>
+kubectl get pod X -o jsonpath='{.spec.terminationGracePeriodSeconds}'
+
+<span class="c"># QoS class, and the kernel kill-priority it maps to</span>
+kubectl get pods -o custom-columns='NAME:.metadata.name,QOS:.status.qosClass'
+kubectl exec POD -- cat /proc/1/oom_score_adj   <span class="c"># -997 / ~992 / 1000</span>
+
+<span class="c"># The kernel's own record of an OOM kill (run on the node)</span>
+sudo dmesg | grep -i 'killed process'
+
+<span class="c"># Why is my PVC stuck Pending? -> no provisioner, or WaitForFirstConsumer</span>
+kubectl get storageclass
+kubectl describe pvc X | tail</pre>
+
+    <h3 class="sub">Mental models locked in</h3>
+    <div class="takes">
+      <div class="take">
+        <b>Termination is a negotiation with a deadline.</b>
+        <p>SIGTERM → wait <code class="inl">terminationGracePeriodSeconds</code> → SIGKILL. Endpoint removal races the shutdown, so <i>fast-exiting</i> apps can drop traffic mid-rollout — a <code class="inl">preStop</code> sleep is the fix.</p>
+      </div>
+      <div class="take crit">
+        <b>Two OOMs, two causes.</b>
+        <p><b>Per-container</b>: blew your own <code class="inl">limits.memory</code> → deterministic cgroup kill, QoS-irrelevant. <b>Node-level</b>: node is full → kubelet evicts (then kernel kills) by QoS — BestEffort first. Set requests, or volunteer to die first.</p>
+      </div>
+      <div class="take">
+        <b>A claim is inert without a provisioner.</b>
+        <p>Same pattern as NetworkPolicy: a PVC is intent; a StorageClass + provisioner is the actor. <code class="inl">WaitForFirstConsumer</code> delays binding until a pod schedules, so node-local volumes land on the right node.</p>
+      </div>
+      <div class="take">
+        <b>Deployments are cattle; StatefulSets are named livestock.</b>
+        <p>Stable ordinal identity, one private PVC per pod (<code class="inl">volumeClaimTemplates</code>), ordered lifecycle, and per-pod DNS via a headless Service. Everything a database needs and a Deployment can't give.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DAY 4 ============ -->
+  <section class="day" id="day4">
+    <div class="day-head">
+      <span class="day-idx">D4</span>
+      <h2>Production Operations</h2>
+      <span class="chip todo">Queued</span>
+    </div>
+    <p>The drills that separate people who run clusters from people who deploy to them.</p>
+    <div class="lab">
+      <span class="tag">4.1</span>
+      <div class="lab-t">etcd backup &amp; restore</div>
+      <div class="lab-d">Snapshot, then <b>lose the data dir</b> and restore a dead cluster from that snapshot. The Day-1 breakage's darker twin.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">4.2</span>
+      <div class="lab-t">Certificate rotation</div>
+      <div class="lab-d">Expire an API server cert on purpose, watch the cluster lock itself out, then rotate the PKI tree back to health.</div>
+    </div>
+    <div class="lab">
+      <span class="tag">4.3</span>
+      <div class="lab-t">Upgrades, drains &amp; PDBs</div>
+      <div class="lab-d">Cordon / drain safely, respect disruption budgets, and roll a version bump across nodes.</div>
+    </div>
+    <div class="lab break">
+      <span class="tag">☂ 4.4</span>
+      <div class="lab-t">Capstone — multi-fault incident</div>
+      <div class="lab-d">Several failures at once, no hints. Diagnose and recover cold.</div>
+    </div>
+  </section>
+
+  <!-- ============ TOOLKIT ============ -->
+  <section class="day" id="toolkit">
+    <div class="day-head">
+      <span class="day-idx">§</span>
+      <h2>Debugging toolkit</h2>
+      <span class="chip todo">Reference</span>
+    </div>
+    <p>The fallback kit for when the friendly tools are gone. Grows as the course does.</p>
+    <div class="toolkit">
+      <div class="tk-row">
+        <div class="k">kubectl hangs</div>
+        <div class="d"><b>apiserver up but stuck</b> on a dependency (usually etcd). Check <code class="inl">/readyz</code> — a 500 names the failing subsystem.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">connection refused</div>
+        <div class="d"><b>Nothing listening</b> on the port — the process is down or in crash-loop backoff. Different layer than a timeout.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">sudo crictl ps</div>
+        <div class="d">Containers on <b>this node only</b> — crictl is node-local. Check the node that actually runs the pod. Needs root (socket is <code class="inl">0660 root:root</code>).</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">journalctl -u kubelet -f</div>
+        <div class="d">The kubelet's live narration. <code class="inl">Housekeeping took too long</code> = it's straining on API/etcd latency.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">restart count</div>
+        <div class="d">A scar that outlives the incident — evidence of <b>how hard and how long</b> a component flapped.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">static pod won't die</div>
+        <div class="d">The <b>file</b> is truth, not the API. Fix a broken control-plane pod by editing the manifest; bounce it by moving the file out and back.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">cross-node broken, same-node OK</div>
+        <div class="d">Suspect the <b>overlay port</b> — a firewall / security group dropping UDP 8472 (Flannel VXLAN), 4789 (std VXLAN), or 179 (Calico BGP). DNS times out too, since CoreDNS is often cross-node.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">tcpdump vs iptables</div>
+        <div class="d"><code class="inl">tcpdump</code> taps the wire <b>before</b> netfilter. A packet on <code class="inl">eth0</code> but never on <code class="inl">flannel.1</code> was dropped in the <code class="inl">INPUT</code> chain in between.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">NetworkPolicy does nothing</div>
+        <div class="d">The object is stored but <b>unenforced</b> unless the CNI implements policy — Flannel doesn't. Fails open, no error. Test-apply a deny and confirm traffic actually stops.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">stuck in Terminating</div>
+        <div class="d">PID 1 isn't exiting on <b>SIGTERM</b>; kubelet SIGKILLs at <code class="inl">terminationGracePeriodSeconds</code>. Fix: handle the signal, add an init shim, or tune the grace period.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">OOMKilled / exit 137</div>
+        <div class="d">Container exceeded its own <code class="inl">limits.memory</code> (cgroup OOM) — raise the limit or fix the leak. <code class="inl">137 = 128 + 9</code> (SIGKILL). Node-wide instead? Check QoS + evictions.</div>
+      </div>
+      <div class="tk-row">
+        <div class="k">PVC stuck Pending</div>
+        <div class="d">No StorageClass/provisioner, an empty <code class="inl">storageClassName</code>, or <code class="inl">WaitForFirstConsumer</code> waiting for a consuming pod. <code class="inl">describe pvc</code> names which.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Kubernetes SRE Field Manual</span>
+    <span>Day 3 of 4 · updated through Lab 3.5</span>
+  </footer>
+
+</div>

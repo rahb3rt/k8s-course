@@ -1,0 +1,18 @@
+# "Deny all ingress to app=web pods."
+# Under Flannel this is INERT — accepted, stored in etcd, and silently unenforced,
+# because Flannel has no policy engine. It fails OPEN with no error or warning.
+# To actually enforce it you need a policy CNI (Calico / Cilium / Antrea).
+#   kubectl apply -f deny-web.networkpolicy.yaml
+#   kubectl exec netlab -- wget -qO- --timeout=3 http://<web-pod-ip>   # still succeeds
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-web
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+    - Ingress
+  # no ingress rules = deny all ingress (in theory)

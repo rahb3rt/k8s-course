@@ -1,0 +1,15 @@
+# A pod whose PID 1 explicitly ignores SIGTERM (`trap "" TERM`).
+# `kubectl delete pod stubborn` will hang ~30s (terminationGracePeriodSeconds) then SIGKILL.
+#   kubectl apply -f stubborn-pod.yaml && kubectl wait --for=condition=Ready pod/stubborn
+#   time kubectl delete pod stubborn
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stubborn
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 30
+  containers:
+    - name: c
+      image: busybox:1.36
+      command: ["sh", "-c", "trap '' TERM; echo ready; sleep 3600"]
