@@ -110,6 +110,15 @@ kubectl get nodes ; kubectl get deployment web       <span class="c"># still 2/2
 <span class="c"># if apiserver stays 'refused' &gt;2 min, kick it: bounce its manifest out and back</span></pre>
       <div class="card"><b>Lessons</b><p>Control plane down ≠ workloads down. When kubectl is dead: <code class="inl">crictl</code> (node-local!), <code class="inl">journalctl -u kubelet</code>, the manifests dir. <code class="inl">refused</code> = nothing listening; <code class="inl">timeout</code> = stuck on a dependency. Data outlives process — <code class="inl">/var/lib/etcd</code> survived, so recovery was lossless.</p></div>
 
+      <h2>Gotchas</h2>
+      <ul>
+        <li>Drop <code class="inl">--mount-proc</code> from <code class="inl">unshare</code> and <code class="inl">ps</code> reads the <em>host's</em> <code class="inl">/proc</code> — the PID-namespace illusion breaks. That flag is load-bearing.</li>
+        <li>The etcd image is <b>distroless</b> — <code class="inl">kubectl exec … -- sh -c</code> fails with <code class="inl">sh: not found</code>. Exec the <code class="inl">etcdctl</code> binary directly (the <code class="inl">ectl</code> helper above).</li>
+        <li><code class="inl">crictl</code> needs root (socket is <code class="inl">0660 root:root</code>) <em>and</em> an endpoint in <code class="inl">/etc/crictl.yaml</code> — configure it <b>before</b> an outage, not during.</li>
+        <li><code class="inl">crictl</code> is <b>node-local</b>: to see a workload's containers, run it on the node the pod actually runs on (cp is tainted, so <code class="inl">web</code> is on the worker).</li>
+        <li>After restoring <code class="inl">etcd.yaml</code>, the apiserver may show <code class="inl">connection refused</code> for up to ~2 min (crash-loop backoff) before recovering — expected, not a second fault. Kick it by bouncing its manifest if it's stuck longer.</li>
+      </ul>
+
       <h2>Takeaways</h2>
       <div class="grid2">
         <div class="card"><b>Container = 3 primitives</b><p>Namespaces + cgroups + rootfs. Every weird-pod bug bottoms out here.</p></div>

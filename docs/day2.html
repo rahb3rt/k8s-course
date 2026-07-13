@@ -90,6 +90,16 @@ kubectl exec netlab -- nslookup kubernetes.default.svc.cluster.local  <span clas
 kubectl exec netlab -- wget -qO- --timeout=3 http://&lt;web-pod-IP&gt;   <span class="c"># STILL works</span></pre>
       <p>A NetworkPolicy is <strong>intent</strong>; enforcement is delegated to the CNI. Flannel has no policy engine, so it’s accepted, stored, and <strong>silently ignored — fails open.</strong> Enforce with a policy CNI (Calico/Cilium) and always test a deny.</p>
 
+      <h2>Gotchas</h2>
+      <ul>
+        <li><code class="inl">tcpdump</code> labels UDP/8472 as <b>"OTV"</b> — it <em>is</em> Flannel VXLAN, don't be thrown. Standard VXLAN is 4789; Flannel uses the older 8472.</li>
+        <li><code class="inl">tcpdump</code> taps the wire <b>before</b> netfilter — a packet visible on <code class="inl">eth0</code> but never on <code class="inl">flannel.1</code> was dropped in the <code class="inl">INPUT</code> chain. That gap <em>is</em> the diagnosis.</li>
+        <li>busybox uses <b>musl</b>, whose resolver doesn't walk search domains — short names like <code class="inl">kubernetes.default</code> return <code class="inl">NXDOMAIN</code>. Test with the FQDN. (A response — even NXDOMAIN — means DNS <em>works</em>; a hang means it's dead.)</li>
+        <li>Overlapping pod and node CIDRs = silent routing breakage. Keep pod CIDR (<code class="inl">10.244/16</code>) disjoint from the node net (<code class="inl">192.168.104/24</code>).</li>
+        <li>A <code class="inl">NetworkPolicy</code> under Flannel is <b>silently unenforced</b> (fails open, no error). Always test a deny before trusting it.</li>
+        <li>kube-proxy needs <code class="inl">conntrack</code> (a fatal kubeadm preflight) and <code class="inl">bridge-nf-call-iptables=1</code>, or Services "exist" but no traffic reaches a pod.</li>
+      </ul>
+
       <h2>Takeaways</h2>
       <div class="grid2">
         <div class="card"><b>Flat pod IPs, two mechanisms</b><p>Same-node = bridge, cross-node = VXLAN; the routing table chooses. 50-byte overhead → MTU 1450.</p></div>
